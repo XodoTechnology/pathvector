@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/mod/semver"
@@ -69,12 +70,16 @@ func read(r io.Reader, w io.Writer) bool {
 }
 
 // Read reads the full BIRD response as a string
-func Read(r io.Reader) (string, error) {
+func Read(r io.Reader) (out string, err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			out = ""
+			err = fmt.Errorf("reading BIRD socket: %v", rec)
+		}
+	}()
+
 	var buf bytes.Buffer
 	for read(r, &buf) {
-	}
-	if r := recover(); r != nil {
-		return "", fmt.Errorf("%s", r)
 	}
 	return buf.String(), nil
 }
@@ -95,11 +100,27 @@ func ReadClean(r io.Reader) {
 	fmt.Println(resp)
 }
 
-// RunCommand runs a BIRD command and returns the output, version, and error
-func RunCommand(command string, socket string) (string, string, error) {
+// DefaultCommandTimeout is the deadline applied to BIRD socket commands when
+// the caller passes a timeout <= 0
+const DefaultCommandTimeout = 60 * time.Second
+
+// RunCommand runs a BIRD command and returns the output, version, and error.
+// A timeout <= 0 uses DefaultCommandTimeout.
+func RunCommand(command string, socket string, timeout time.Duration) (string, string, error) {
+	if timeout <= 0 {
+		timeout = DefaultCommandTimeout
+	}
 	log.Debugln("Connecting to BIRD socket")
-	conn, err := net.Dial("unix", socket)
+	dialTimeout := timeout
+	if dialTimeout > 10*time.Second {
+		dialTimeout = 10 * time.Second
+	}
+	conn, err := net.DialTimeout("unix", socket, dialTimeout)
 	if err != nil {
+		return "", "", err
+	}
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		conn.Close()
 		return "", "", err
 	}
 	//noinspection GoUnhandledErrorResult
@@ -136,7 +157,7 @@ func RunCommand(command string, socket string) (string, string, error) {
 }
 
 // Validate checks if the cached configuration is syntactically valid
-func Validate(binary string, cacheDir string) {
+func Validate(binary string, cacheDir string) error {
 	log.Debugf("Validating BIRD config")
 	var outb, errb bytes.Buffer
 	birdCmd := exec.Command(binary, "-c", "bird.conf", "-p")
@@ -152,7 +173,7 @@ func Validate(binary string, cacheDir string) {
 		// bird: ./AS65530_EXAMPLE.conf:20:43 syntax error, unexpected '%'
 		match, err := regexp.MatchString(`bird:.*:\d+:\d+.*`, errbT)
 		if err != nil {
-			log.Fatalf("BIRD error regex match: %s", err)
+			return fmt.Errorf("BIRD error regex match: %s", err)
 		}
 		errorMessageToLog := errbT
 		if match {
@@ -163,18 +184,18 @@ func Validate(binary string, cacheDir string) {
 			errorFile := respPartsColon[0]
 			errorLine, err := strconv.Atoi(respPartsColon[1])
 			if err != nil {
-				log.Fatalf("BIRD error line int parse: %s", err)
+				return fmt.Errorf("BIRD error line int parse: %s", err)
 			}
 			errorChar, err := strconv.Atoi(respPartsColon[2])
 			if err != nil {
-				log.Fatalf("BIRD error line int parse: %s", err)
+				return fmt.Errorf("BIRD error char int parse: %s", err)
 			}
 			log.Debugf("Found error in %s:%d:%d message %s", errorFile, errorLine, errorChar, errorMessage)
 
 			// Read output file
 			file, err := os.Open(path.Join(cacheDir, errorFile))
 			if err != nil {
-				log.Fatalf("unable to read BIRD output file for error parsing: %s", err)
+				return fmt.Errorf("unable to read BIRD output file for error parsing: %s", err)
 			}
 			defer file.Close()
 
@@ -190,36 +211,37 @@ func Validate(binary string, cacheDir string) {
 				line++
 			}
 			if err := scanner.Err(); err != nil {
-				log.Fatalf("BIRD output file scan: %s", err)
+				return fmt.Errorf("BIRD output file scan: %s", err)
 			}
 		}
 		if errorMessageToLog == "" {
 			errorMessageToLog = origErr.Error()
 		}
-		log.Fatalf("BIRD: %s\n", errorMessageToLog)
+		return fmt.Errorf("BIRD: %s", errorMessageToLog)
 	}
 
 	log.Infof("BIRD config validation passed")
+	return nil
 }
 
 // MoveCacheAndReconfigure moves cached files to the production BIRD directory and reconfigures
-func MoveCacheAndReconfigure(birdDirectory string, cacheDirectory string, birdSocket string, noConfigure bool) {
+func MoveCacheAndReconfigure(birdDirectory string, cacheDirectory string, birdSocket string, noConfigure bool, commandTimeout time.Duration) error {
 	// Remove old configs
 	birdConfigFiles, err := filepath.Glob(path.Join(birdDirectory, "AS*.conf"))
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	for _, f := range birdConfigFiles {
 		log.Debugf("Removing old BIRD config file %s", f)
 		if err := os.Remove(f); err != nil {
-			log.Fatalf("Removing old BIRD config files: %v", err)
+			return fmt.Errorf("removing old BIRD config files: %v", err)
 		}
 	}
 
 	// Copy from cache to bird config
 	files, err := filepath.Glob(path.Join(cacheDirectory, "*.conf"))
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	for _, f := range files {
 		fileNameParts := strings.Split(f, "/")
@@ -227,7 +249,7 @@ func MoveCacheAndReconfigure(birdDirectory string, cacheDirectory string, birdSo
 		newFileLoc := path.Join(birdDirectory, fileNameTail)
 		log.Debugf("Moving %s to %s", f, newFileLoc)
 		if err := util.MoveFile(f, newFileLoc); err != nil {
-			log.Fatalf("Moving cache file to bird directory: %v", err)
+			return fmt.Errorf("moving cache file to bird directory: %v", err)
 		}
 	}
 
@@ -238,20 +260,22 @@ func MoveCacheAndReconfigure(birdDirectory string, cacheDirectory string, birdSo
 		path.Join(cacheDirectory, configFilename),
 		path.Join(birdDirectory, configFilename),
 	); err != nil {
-		log.Fatalf("Moving pathvector config file: %v", err)
+		return fmt.Errorf("moving pathvector config file: %v", err)
 	}
 
 	if !noConfigure {
 		log.Info("Reconfiguring BIRD")
-		resp, _, err := RunCommand("configure", birdSocket)
+		resp, _, err := RunCommand("configure", birdSocket, commandTimeout)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		// Print bird output as multiple lines
 		for _, line := range strings.Split(strings.Trim(resp, "\n"), "\n") {
 			log.Printf("BIRD response (multiline): %s", line)
 		}
 	}
+
+	return nil
 }
 
 // Reformat takes a BIRD config file as a string and outputs a nicely formatted version as a string
@@ -284,6 +308,7 @@ type Routes struct {
 }
 
 type BGPState struct {
+	State           string
 	NeighborAddress string
 	NeighborAS      int
 	LocalAS         int
@@ -323,6 +348,11 @@ func parseBGP(s string) (*BGPState, error) {
 
 	if !strings.Contains(s, "BGP state:") {
 		return nil, nil
+	}
+
+	stateRegex := regexp.MustCompile(`BGP state:\s+(\w+)`)
+	if m := stateRegex.FindStringSubmatch(s); len(m) > 1 {
+		out.State = m[1]
 	}
 
 	addressRegex := regexp.MustCompile(`(.*)Neighbor address:(.*)`)
@@ -444,8 +474,13 @@ func ParseProtocol(p string) (*ProtocolState, error) {
 		since = headerParts[4]
 		info = strings.Join(headerParts[5:], " ")
 	} else { // Split time/date
-		since = headerParts[4] + " " + headerParts[5]
-		info = strings.Join(headerParts[6:], " ")
+		since = headerParts[4]
+		if len(headerParts) > 5 {
+			since += " " + headerParts[5]
+		}
+		if len(headerParts) > 6 {
+			info = strings.Join(headerParts[6:], " ")
+		}
 	}
 
 	// Parse header

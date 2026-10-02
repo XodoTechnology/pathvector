@@ -139,10 +139,10 @@ func NetworkInfo(asn uint32, queryTimeout uint, apiKey string, useCache bool) (*
 }
 
 // Update updates peer values from PeeringDB
-func Update(peerData *config.Peer, queryTimeout uint, apiKey string, useCache bool) {
+func Update(peerData *config.Peer, queryTimeout uint, apiKey string, useCache bool) error {
 	pDbData, err := NetworkInfo(uint32(*peerData.ASN), queryTimeout, apiKey, useCache)
 	if err != nil {
-		log.Fatalf("unable to get PeeringDB data: %+v", err)
+		return fmt.Errorf("unable to get PeeringDB data: %+v", err)
 	}
 
 	// Set import limits
@@ -167,6 +167,8 @@ func Update(peerData *config.Peer, queryTimeout uint, apiKey string, useCache bo
 
 		peerData.ASSet = &pDbData.ASSet
 	}
+
+	return nil
 }
 
 // NeverViaRouteServers gets a list of networks that report should never be reachable via route servers

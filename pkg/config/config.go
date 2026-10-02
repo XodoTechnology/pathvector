@@ -89,11 +89,30 @@ var defaultBogonASNs = []string{
 	"4294967295",             // Reserved. RFC7300
 }
 
+// PrefixRule is a per-prefix routing policy applied in the export filter of
+// matching peers. Rules match routes learned from a source session (by
+// protocol name glob) announcing a given prefix.
+type PrefixRule struct {
+	Session string   `yaml:"session" description:"Source session name (routes learned from it are matched)"`
+	Prefix  string   `yaml:"prefix" description:"Prefix this rule applies to" validate:"required,cidr"`
+	Action  string   `yaml:"action" description:"reject, blackhole, prepend, prepend1-3, no-transit, no-peers, no-export" validate:"required"`
+	Targets []string `yaml:"targets" description:"Template names this rule applies to (empty = default for the action)"`
+	ASN     uint32   `yaml:"asn" description:"ASN to prepend (defaults to the source session's ASN)"`
+	Count   int      `yaml:"count" description:"Number of times to prepend (action prepend, default 1)"`
+
+	// Resolved at load time
+	ProtoGlob string `yaml:"-" description:"-"`
+	Kind      string `yaml:"-" description:"-"`
+}
+
 // Peer stores a single peer config
 type Peer struct {
 	Template *string `yaml:"template" description:"Configuration template" default:"-"`
 
+	ResolvedPrefixRules []*PrefixRule `yaml:"-" description:"-" default:"-"`
+
 	Description *string   `yaml:"description" description:"Peer description" default:"-"`
+	Comments    *[]string `yaml:"comments" description:"Comments in the generated peer configuration file" default:"-"`
 	Tags        *[]string `yaml:"tags" description:"Peer tags" default:"-"`
 	Disabled    *bool     `yaml:"disabled" description:"Should the sessions be disabled?" default:"false"`
 
@@ -111,6 +130,7 @@ type Peer struct {
 	LocalPref6             *int      `yaml:"local-pref6" description:"IPv6 BGP local preference (overrides local-pref, not included in optimizer)" default:"-"`
 	SetLocalPref           *bool     `yaml:"set-local-pref" description:"Should an explicit local pref be set?" default:"true"`
 	Multihop               *bool     `yaml:"multihop" description:"Should BGP multihop be enabled? (255 max hops)" default:"false"`
+	Interface              *string   `yaml:"interface" description:"Interface for link-local BGP sessions" default:"-"`
 	Listen4                *string   `yaml:"listen4" description:"IPv4 BGP listen address" default:"-"`
 	Listen6                *string   `yaml:"listen6" description:"IPv6 BGP listen address" default:"-"`
 	LocalASN               *int      `yaml:"local-asn" description:"Local ASN as defined in the global ASN field" default:"-"`
@@ -137,10 +157,12 @@ type Peer struct {
 	TTLSecurity            *bool     `yaml:"ttl-security" description:"RFC 5082 Generalized TTL Security Mechanism" default:"false"`
 	InterpretCommunities   *bool     `yaml:"interpret-communities" description:"Should well-known BGP communities be interpreted by their intended action?" default:"true"`
 	DefaultLocalPref       *int      `yaml:"default-local-pref" description:"Default value for local preference" default:"-"`
+	DefaultBGPMED          *int      `yaml:"bgp-med" description:"Value of the Multiple Exit Discriminator to be used during route selection when the MED attribute is missing" default:"0"`
 	AdvertiseHostname      *bool     `yaml:"advertise-hostname" description:"Advertise hostname capability" default:"false"`
 	DisableAfterError      *bool     `yaml:"disable-after-error" description:"Disable peer after error" default:"false"`
 	PreferOlderRoutes      *bool     `yaml:"prefer-older-routes" description:"Prefer older routes instead of comparing router IDs (RFC 5004)" default:"false"`
 	IRRAcceptChildPrefixes *bool     `yaml:"irr-accept-child-prefixes" description:"Accept prefixes up to /24 and /48 from covering parent IRR objects" default:"false"`
+	Gateway                *string   `yaml:"gateway" description:"How the gateway for received routes is determined (direct or recursive)" default:"-"`
 
 	ImportCommunities    *[]string `yaml:"add-on-import" description:"List of communities to add to all imported routes" default:"-"`
 	ExportCommunities    *[]string `yaml:"add-on-export" description:"List of communities to add to all exported routes" default:"-"`
@@ -157,8 +179,8 @@ type Peer struct {
 	// Filtering
 	ASSet *string `yaml:"as-set" description:"Peer's as-set for filtering" default:"-"`
 
-	ImportLimit4          *int    `yaml:"import-limit4" description:"Maximum number of IPv4 prefixes to import after filtering" default:"1250000"`
-	ImportLimit6          *int    `yaml:"import-limit6" description:"Maximum number of IPv6 prefixes to import after filtering" default:"500000"`
+	ImportLimit4          *int    `yaml:"import-limit4" description:"Maximum number of IPv4 prefixes to import after filtering" default:"1500000"`
+	ImportLimit6          *int    `yaml:"import-limit6" description:"Maximum number of IPv6 prefixes to import after filtering" default:"1000000"`
 	ImportLimitTripAction *string `yaml:"import-limit-violation" description:"What action should be taken when the import limit is tripped?" default:"disable"`
 
 	ReceiveLimit4          *int    `yaml:"receive-limit4" description:"Maximum number of IPv4 prefixes to accept (including filtered routes, requires keep-filtered)" default:"-"`
@@ -322,6 +344,17 @@ type Optimizer struct {
 
 // Config stores the global configuration
 type Config struct {
+	Include []string `yaml:"include" description:"List of glob patterns (relative to the config file directory) for additional config fragments to merge (peers, templates, vrrp, bfd, mrt)"`
+
+	APIListen       string `yaml:"api-listen" description:"Listen address for the management API (host:port or unix:///path). Empty disables the API"`
+	APIKey          string `yaml:"api-key" description:"Bearer token for API authentication"`
+	APISessionsDir  string `yaml:"api-sessions-dir" description:"Directory for API-managed session fragments (default: sessions.d next to the config file)"`
+	ReportURL       string `yaml:"report-url" description:"POST session state to this URL (e.g. XodoPanel /api/v1/bgp/report)"`
+	ReportKey       string `yaml:"report-key" description:"API key sent as X-API-Key to report-url"`
+	ReportInterval  int    `yaml:"report-interval" description:"Seconds between state reports" default:"60"`
+	ReportRouter    string `yaml:"report-router" description:"Router name included in state reports (default: hostname)"`
+	ReportPrefixCap int    `yaml:"report-prefix-cap" description:"Maximum prefixes enumerated per session in state reports" default:"1000"`
+
 	PeeringDBQueryTimeout uint   `yaml:"peeringdb-query-timeout" description:"PeeringDB query timeout in seconds" default:"10"`
 	PeeringDBAPIKey       string `yaml:"peeringdb-api-key" description:"PeeringDB API key"`
 	PeeringDBCache        bool   `yaml:"peeringdb-cache" description:"Cache PeeringDB results" default:"true"`
@@ -348,22 +381,27 @@ type Config struct {
 	ImportCommunities []string `yaml:"add-on-import" description:"List of communities to add to all imported routes" default:"-"`
 	ExportCommunities []string `yaml:"add-on-export" description:"List of communities to add to all exported routes" default:"-"`
 
+	ShowWarningMessage bool `yaml:"show-warning-message" description:"Show autogenerated warning banner on generated files" default:"true"`
+
 	Hostname string `yaml:"hostname" description:"Router hostname (default system hostname)" default:""`
 
 	ASN      int      `yaml:"asn" description:"Autonomous System Number" validate:"required" default:"0"`
 	Prefixes []string `yaml:"prefixes" description:"List of prefixes to announce"`
 
-	RouterID      string `yaml:"router-id" description:"Router ID (dotted quad notation)" validate:"required"`
-	IRRServer     string `yaml:"irr-server" description:"Internet routing registry server" default:"rr.ntt.net"`
-	RTRServer     string `yaml:"rtr-server" description:"RPKI-to-router server" default:"rtr.rpki.cloudflare.com:8282"`
-	BGPQArgs      string `yaml:"bgpq-args" description:"Additional command line arguments to pass to bgpq4" default:""`
-	KeepFiltered  bool   `yaml:"keep-filtered" description:"Should filtered routes be kept in memory?" default:"false"`
-	MergePaths    bool   `yaml:"merge-paths" description:"Should best and equivalent non-best routes be imported to build ECMP routes?" default:"false"`
-	Source4       string `yaml:"source4" description:"Source IPv4 address"`
-	Source6       string `yaml:"source6" description:"Source IPv6 address"`
-	DefaultRoute  bool   `yaml:"default-route" description:"Add a default route" default:"true"`
-	AcceptDefault bool   `yaml:"accept-default" description:"Should default routes be accepted? Setting to false adds 0.0.0.0/0 and ::/0 to the global bogon list." default:"false"`
-	RPKIEnable    bool   `yaml:"rpki-enable" description:"Enable RPKI protocol" default:"true"`
+	RouterID    string `yaml:"router-id" description:"Router ID (dotted quad notation)" validate:"required"`
+	IRRServer   string `yaml:"irr-server" description:"Internet routing registry server" default:"rr.ntt.net"`
+	RTRServer   string `yaml:"rtr-server" description:"RPKI-to-router server" default:"rtr.rpki.cloudflare.com:8282"`
+	BGPQArgs    string `yaml:"bgpq-args" description:"Additional command line arguments to pass to bgpq4" default:""`
+	BIRDTimeout int    `yaml:"bird-timeout" description:"Timeout in seconds for BIRD socket commands (dial capped at 10s)" default:"60"`
+
+	PrefixRules   []*PrefixRule `yaml:"prefix-rules" description:"Per-prefix routing policies applied at export on matching sessions"`
+	KeepFiltered  bool          `yaml:"keep-filtered" description:"Should filtered routes be kept in memory?" default:"false"`
+	MergePaths    bool          `yaml:"merge-paths" description:"Should best and equivalent non-best routes be imported to build ECMP routes?" default:"false"`
+	Source4       string        `yaml:"source4" description:"Source IPv4 address"`
+	Source6       string        `yaml:"source6" description:"Source IPv6 address"`
+	DefaultRoute  bool          `yaml:"default-route" description:"Add a default route" default:"true"`
+	AcceptDefault bool          `yaml:"accept-default" description:"Should default routes be accepted? Setting to false adds 0.0.0.0/0 and ::/0 to the global bogon list." default:"false"`
+	RPKIEnable    bool          `yaml:"rpki-enable" description:"Enable RPKI protocol" default:"true"`
 
 	TransitASNs        []uint32 `yaml:"transit-asns" description:"List of ASNs to consider transit providers for filter-transit-asns (default list in config)" default:""`
 	Bogons4            []string `yaml:"bogons4" description:"List of IPv4 bogons (default list in config)" default:""`

@@ -219,9 +219,14 @@ func modifyPref(
 	}
 
 	// Run BIRD config validation
-	bird.Validate(birdBinary, birdDirectory)
+	if err := bird.Validate(birdBinary, birdDirectory); err != nil {
+		log.Errorf("[Optimizer] BIRD validation failed: %s", err)
+		return
+	}
 
 	if !dryRun {
-		bird.MoveCacheAndReconfigure(birdDirectory, cacheDirectory, birdSocket, noConfigure)
+		if err := bird.MoveCacheAndReconfigure(birdDirectory, cacheDirectory, birdSocket, noConfigure, 0); err != nil {
+			log.Errorf("[Optimizer] applying optimized config: %s", err)
+		}
 	}
 }

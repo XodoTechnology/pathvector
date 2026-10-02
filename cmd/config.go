@@ -53,12 +53,12 @@ var configCmd = &cobra.Command{
 		var buf string
 
 		birdVersion := "unknown"
-		c, err := process.Load(cf)
+		c, err := process.LoadFile(configFile)
 		if err != nil {
 			buf += fmt.Sprintf("# Error loading config: %s\n", err)
 		} else {
 			log.Debug("Finished loading config")
-			_, birdVersion, err = bird.RunCommand("", c.BIRDSocket)
+			_, birdVersion, err = bird.RunCommand("", c.BIRDSocket, time.Duration(c.BIRDTimeout)*time.Second)
 			if err != nil {
 				birdVersion = fmt.Sprintf("error: %s", err)
 			}

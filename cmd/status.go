@@ -7,6 +7,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	log "github.com/sirupsen/logrus"
@@ -65,7 +66,7 @@ var statusCmd = &cobra.Command{
 			log.Warnf("Error loading config, falling back to no-config output parsing: %s", err)
 		}
 
-		commandOutput, _, err := bird.RunCommand("show protocols all", c.BIRDSocket)
+		commandOutput, _, err := bird.RunCommand("show protocols all", c.BIRDSocket, time.Duration(c.BIRDTimeout)*time.Second)
 		if err != nil {
 			log.Fatal(err)
 		}

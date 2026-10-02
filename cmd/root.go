@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"os"
-
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -38,13 +36,9 @@ var rootCmd = &cobra.Command{
 func loadConfig() (*config.Config, error) {
 	// Load the config file from config file
 	log.Debugf("Loading config from %s", configFile)
-	configFile, err := os.ReadFile(configFile)
+	c, err := process.LoadFile(configFile)
 	if err != nil {
-		log.Fatalf("Reading config file: %s", err)
-	}
-	c, err := process.Load(configFile)
-	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	log.Debug("Finished loading config")
 	return c, nil

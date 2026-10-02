@@ -122,7 +122,7 @@ func PrintTable(header []string, data [][]string) {
 func RemoveFileGlob(glob string) error {
 	files, err := filepath.Glob(glob)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	for _, f := range files {
 		if err := os.Remove(f); err != nil {
@@ -209,7 +209,7 @@ func CopyFileTo(source, destinationDir string) (err error) {
 func CopyFileToGlob(glob, dest string) error {
 	files, err := filepath.Glob(glob)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	for _, f := range files {
 		if err := CopyFileTo(f, dest); err != nil {

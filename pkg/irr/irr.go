@@ -37,10 +37,10 @@ func PrefixSet(macro string, family uint8, irrServer string, queryTimeout uint, 
 		}
 		log.Debugf("Running bgpq4 %s", cmdArgs)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(queryTimeout))
-		defer cancel()
 		//nolint:golint,gosec
 		cmd := exec.CommandContext(ctx, "bgpq4", strings.Split(cmdArgs, " ")...)
 		stdout, err := cmd.Output()
+		cancel()
 		if err != nil {
 			return nil, err
 		}
@@ -101,7 +101,7 @@ func Update(peerData *config.Peer, irrServer string, queryTimeout uint, bgpqArgs
 			} else if strings.Contains(n, ":") {
 				hasNeighbor6 = true
 			} else {
-				log.Fatalf("Invalid neighbor IP %s", n)
+				return fmt.Errorf("invalid neighbor IP %s", n)
 			}
 		}
 	}

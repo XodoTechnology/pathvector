@@ -53,6 +53,14 @@ var funcMap = template.FuncMap{
 		return items
 	},
 
+	"IterateInt": func(count int) []int {
+		var items []int
+		for i := 0; i < count; i++ {
+			items = append(items, i)
+		}
+		return items
+	},
+
 	"BirdSet": func(prefixes []string) string {
 		// Build a formatted BIRD prefix list
 		output := ""
@@ -265,39 +273,47 @@ func Load(fs embed.FS) error {
 	return err
 }
 
+// vrrpTemplateData is the template context for vrrp.tmpl
+type vrrpTemplateData struct {
+	Config    *config.Config
+	Instances map[string]*config.VRRPInstance
+}
+
 // WriteVRRPConfig writes the VRRP config to a keepalived config file
-func WriteVRRPConfig(instances map[string]*config.VRRPInstance, keepalivedConfig string) {
-	if len(instances) < 1 {
+func WriteVRRPConfig(c *config.Config) error {
+	if len(c.VRRPInstances) < 1 {
 		log.Debug("No VRRP instances are defined, not writing config")
-		return
+		return nil
 	}
 
 	// Create the VRRP config file
-	keepalivedFile, err := os.Create(keepalivedConfig)
+	keepalivedFile, err := os.Create(c.KeepalivedConfig)
 	if err != nil {
-		log.Fatalf("Create keepalived output file: %v", err)
+		return fmt.Errorf("create keepalived output file: %v", err)
 	}
 
 	// Render the template and write to disk
-	if err := Template.ExecuteTemplate(keepalivedFile, "vrrp.tmpl", instances); err != nil {
-		log.Fatalf("Execute template: %v", err)
+	if err := Template.ExecuteTemplate(keepalivedFile, "vrrp.tmpl", vrrpTemplateData{Config: c, Instances: c.VRRPInstances}); err != nil {
+		return fmt.Errorf("execute template: %v", err)
 	}
+	return nil
 }
 
 // WriteUIFile renders and writes the web UI file
-func WriteUIFile(config *config.Config) {
+func WriteUIFile(config *config.Config) error {
 	// Create the UI output file
 	log.Debug("Creating UI output file")
 	uiFileObj, err := os.Create(config.WebUIFile)
 	if err != nil {
-		log.Fatalf("Create UI output file: %v", err)
+		return fmt.Errorf("create UI output file: %v", err)
 	}
 	log.Debug("Finished creating UI file")
 
 	// Render the UI template and write to disk
 	log.Debug("Writing UI file")
 	if err := Template.ExecuteTemplate(uiFileObj, "ui.tmpl", config); err != nil {
-		log.Fatalf("Execute UI template: %v", err)
+		return fmt.Errorf("execute UI template: %v", err)
 	}
 	log.Debug("Finished writing UI file")
+	return nil
 }
