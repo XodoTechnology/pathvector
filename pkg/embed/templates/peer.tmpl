@@ -104,6 +104,7 @@ protocol bgp {{ UniqueProtocolName $peer.ProtocolName $peerName $af $peer.ASN $p
         {{ if BoolDeref $peer.NextHopSelfIBGP }}next hop self ibgp;{{ end }}
         {{ if BoolDeref $peer.AddPathTx }}add paths tx;{{ end }}
         {{ if BoolDeref $peer.AddPathRx }}add paths rx;{{ end }}
+        {{ if BoolDeref $peer.ExtendedNextHop }}extended next hop on;{{ end }}
         {{ if BoolDeref $peer.DisableAfterError }}disable after error on;{{ end }}
         {{ if StrDeref $peer.Gateway }}gateway {{ StrDeref $peer.Gateway }};{{ end }}
         import filter {

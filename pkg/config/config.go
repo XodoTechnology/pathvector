@@ -141,6 +141,7 @@ type Peer struct {
 	NextHopSelf            *bool     `yaml:"next-hop-self" description:"Should BGP next-hop-self be enabled?" default:"false"`
 	NextHopSelfEBGP        *bool     `yaml:"next-hop-self-ebgp" description:"Should BGP next-hop-self for eBGP be enabled?" default:"false"`
 	NextHopSelfIBGP        *bool     `yaml:"next-hop-self-ibgp" description:"Should BGP next-hop-self for iBGP be enabled?" default:"false"`
+	ExtendedNextHop        *bool     `yaml:"extended-next-hop" description:"Should RFC 8950 extended next hop encoding be enabled?" default:"false"`
 	BFD                    *bool     `yaml:"bfd" description:"Should BFD be enabled?" default:"false"`
 	Password               *string   `yaml:"password" description:"BGP MD5 password" default:"-"`
 	RSClient               *bool     `yaml:"rs-client" description:"Should this peer be a route server client?" default:"false"`

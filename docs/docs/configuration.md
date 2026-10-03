@@ -991,6 +991,14 @@ Should BGP next-hop-self for iBGP be enabled?
 |------|---------|------------|
 | bool   | false      |          |
 
+### `extended-next-hop`
+
+Should RFC 8950 extended next hop encoding be enabled?
+
+| Type | Default | Validation |
+|------|---------|------------|
+| bool   | false      |          |
+
 ### `bfd`
 
 Should BFD be enabled?

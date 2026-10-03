@@ -63,6 +63,8 @@ peers:
     allow-local-as: true
     add-path-tx: true
     ttl-security: true
+    gateway: recursive
+    extended-next-hop: true
     confederation-member: true
     filter-never-via-route-servers: true
     confederation: 1
