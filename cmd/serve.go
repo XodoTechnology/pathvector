@@ -38,11 +38,33 @@ var serveCmd = &cobra.Command{
 		if sessionsDir == "" {
 			sessionsDir = filepath.Join(filepath.Dir(configFile), "sessions.d")
 		}
+		// Resolve relative paths against the config file directory, matching
+		// how include: globs are resolved
+		if !filepath.IsAbs(sessionsDir) {
+			var err error
+			if sessionsDir, err = filepath.Abs(filepath.Join(filepath.Dir(configFile), sessionsDir)); err != nil {
+				log.Fatalf("resolving api-sessions-dir: %s", err)
+			}
+		}
 
-		// Warn if API-managed fragments won't be picked up by Load
-		if len(c.Include) == 0 {
-			log.Warn("No include patterns in config - sessions created via the API " +
-				"will not be loaded. Add e.g. `include: [\"sessions.d/*.yml\"]` to pathvector.yml")
+		// Refuse to start if API-managed fragments won't be picked up by Load:
+		// check that a probe file inside the sessions dir matches at least one
+		// include glob (resolved against the config dir)
+		probe := filepath.Join(sessionsDir, "probe.yml")
+		matched := false
+		for _, pattern := range c.Include {
+			if !filepath.IsAbs(pattern) {
+				pattern = filepath.Join(filepath.Dir(configFile), pattern)
+			}
+			if ok, _ := filepath.Match(pattern, probe); ok {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			log.Fatalf("api-sessions-dir %s is not matched by any include: pattern - "+
+				"API-written sessions would never be loaded. Add e.g. `include: [\"%s/*.yml\"]` to pathvector.yml",
+				sessionsDir, sessionsDir)
 		}
 
 		if c.ReportURL != "" {

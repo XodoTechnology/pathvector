@@ -15,7 +15,7 @@ Add to `pathvector.yml`:
 ```yaml
 api-listen: unix:///run/pathvector/api.sock   # or 0.0.0.0:8084 for TCP
 api-key: <shared secret>                       # bearer auth; required for TCP
-api-sessions-dir: sessions.d                   # optional, default shown
+api-sessions-dir: sessions.d                   # relative to the config file's dir (NOT cwd)
 report-url: https://panel.example.com/api/v1/bgp/report
 report-key: <panel report key>
 report-interval: 60
@@ -28,6 +28,8 @@ include:
 Then run `pathvector serve -c /etc/pathvector.yml` (systemd unit alongside
 BIRD). Cron `pathvector generate` keeps working — API sessions live in
 `sessions.d/*.yml` fragments merged by `include:`, so both paths see them.
+`serve` refuses to start if `api-sessions-dir` is not covered by an `include:`
+glob — without that, fragments would be written but never loaded.
 
 ## API surface (all JSON; `Authorization: Bearer <api-key>`)
 

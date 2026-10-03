@@ -196,7 +196,7 @@ func (s *Server) configSHA256() string {
 	if b, err := os.ReadFile(s.ConfigFile); err == nil {
 		h.Write(b)
 	}
-	frags, err := filepath.Glob(filepath.Join(s.SessionsDir, "*.yml"))
+	frags, err := filepath.Glob(filepath.Join(s.sessionsDir(), "*.yml"))
 	if err == nil {
 		sort.Strings(frags)
 		for _, f := range frags {
@@ -297,7 +297,7 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 // whole config
 func (s *Server) getSessionConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	_, fields, err := s.readFragment(name)
+	_, fields, err := s.readFragment(s.sessionsDir(), name)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, fmt.Errorf("session %q is not API-managed", name))
 		return
@@ -318,13 +318,35 @@ func validSessionName(name string) bool {
 	return sessionNameRegex.MatchString(name) && !strings.Contains(name, "..")
 }
 
-func (s *Server) fragmentPath(name string) string {
-	return filepath.Join(s.SessionsDir, name+".yml")
+// sessionsDir resolves the fragment directory from the on-disk config each
+// call, so edits to api-sessions-dir take effect without restarting serve.
+// It parses just that one key (non-strict) so it still works when the config
+// is broken elsewhere - e.g. DELETE must be able to remove a bad fragment.
+// Relative paths resolve against the config file's directory, same as
+// include: globs.
+func (s *Server) sessionsDir() string {
+	var minimal struct {
+		Dir string `yaml:"api-sessions-dir"`
+	}
+	if b, err := os.ReadFile(s.ConfigFile); err == nil {
+		_ = yaml.Unmarshal(b, &minimal)
+	}
+	if minimal.Dir == "" {
+		return s.SessionsDir
+	}
+	if !filepath.IsAbs(minimal.Dir) {
+		return filepath.Join(filepath.Dir(s.ConfigFile), minimal.Dir)
+	}
+	return minimal.Dir
+}
+
+func (s *Server) fragmentPath(dir, name string) string {
+	return filepath.Join(dir, name+".yml")
 }
 
 // writeFragment renders a session fragment file {peers: {name: fields}}
-func (s *Server) writeFragment(name string, fields map[string]any) error {
-	if err := os.MkdirAll(s.SessionsDir, 0755); err != nil {
+func (s *Server) writeFragment(dir, name string, fields map[string]any) error {
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
 	doc := map[string]any{"peers": map[string]any{name: fields}}
@@ -333,11 +355,11 @@ func (s *Server) writeFragment(name string, fields map[string]any) error {
 		return err
 	}
 	header := []byte("# Managed by pathvector API - do not edit\n")
-	return os.WriteFile(s.fragmentPath(name), append(header, b...), 0644)
+	return os.WriteFile(s.fragmentPath(dir, name), append(header, b...), 0644)
 }
 
-func (s *Server) readFragment(name string) ([]byte, map[string]any, error) {
-	b, err := os.ReadFile(s.fragmentPath(name))
+func (s *Server) readFragment(dir, name string) ([]byte, map[string]any, error) {
+	b, err := os.ReadFile(s.fragmentPath(dir, name))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -364,20 +386,21 @@ func (s *Server) putSession(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	old, readErr := os.ReadFile(s.fragmentPath(name))
+	dir := s.sessionsDir()
+	old, readErr := os.ReadFile(s.fragmentPath(dir, name))
 	existed := readErr == nil
 
-	if err := s.writeFragment(name, fields); err != nil {
+	if err := s.writeFragment(dir, name, fields); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	if _, err := s.load(); err != nil {
-		s.rollbackFragment(name, old, existed)
+		s.rollbackFragment(dir, name, old, existed)
 		writeErr(w, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
-		s.rollbackFragment(name, old, existed)
+		s.rollbackFragment(dir, name, old, existed)
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -399,7 +422,8 @@ func (s *Server) patchSession(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	old, fields, err := s.readFragment(name)
+	dir := s.sessionsDir()
+	old, fields, err := s.readFragment(dir, name)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, fmt.Errorf("session %q is not API-managed", name))
 		return
@@ -414,17 +438,17 @@ func (s *Server) patchSession(w http.ResponseWriter, r *http.Request) {
 			fields[k] = v
 		}
 	}
-	if err := s.writeFragment(name, fields); err != nil {
+	if err := s.writeFragment(dir, name, fields); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	if _, err := s.load(); err != nil {
-		s.rollbackFragment(name, old, true)
+		s.rollbackFragment(dir, name, old, true)
 		writeErr(w, http.StatusUnprocessableEntity, err)
 		return
 	}
 	if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
-		s.rollbackFragment(name, old, true)
+		s.rollbackFragment(dir, name, old, true)
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -441,17 +465,18 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	old, err := os.ReadFile(s.fragmentPath(name))
+	dir := s.sessionsDir()
+	old, err := os.ReadFile(s.fragmentPath(dir, name))
 	if err != nil {
 		writeErr(w, http.StatusNotFound, fmt.Errorf("session %q is not API-managed", name))
 		return
 	}
-	if err := os.Remove(s.fragmentPath(name)); err != nil {
+	if err := os.Remove(s.fragmentPath(dir, name)); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
-		s.rollbackFragment(name, old, true)
+		s.rollbackFragment(dir, name, old, true)
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -464,7 +489,8 @@ func (s *Server) setSessionDisabled(disabled bool) http.HandlerFunc {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
-		old, fields, err := s.readFragment(name)
+		dir := s.sessionsDir()
+		old, fields, err := s.readFragment(dir, name)
 		if err != nil {
 			writeErr(w, http.StatusNotFound, fmt.Errorf("session %q is not API-managed", name))
 			return
@@ -473,12 +499,12 @@ func (s *Server) setSessionDisabled(disabled bool) http.HandlerFunc {
 			fields = map[string]any{}
 		}
 		fields["disabled"] = disabled
-		if err := s.writeFragment(name, fields); err != nil {
+		if err := s.writeFragment(dir, name, fields); err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}
 		if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
-			s.rollbackFragment(name, old, true)
+			s.rollbackFragment(dir, name, old, true)
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -487,13 +513,13 @@ func (s *Server) setSessionDisabled(disabled bool) http.HandlerFunc {
 }
 
 // rollbackFragment restores or removes a session fragment after a failed apply
-func (s *Server) rollbackFragment(name string, old []byte, existed bool) {
+func (s *Server) rollbackFragment(dir, name string, old []byte, existed bool) {
 	if existed {
-		if err := os.WriteFile(s.fragmentPath(name), old, 0644); err != nil {
+		if err := os.WriteFile(s.fragmentPath(dir, name), old, 0644); err != nil {
 			log.Errorf("api: restoring session fragment %s: %s", name, err)
 		}
 	} else {
-		if err := os.Remove(s.fragmentPath(name)); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(s.fragmentPath(dir, name)); err != nil && !os.IsNotExist(err) {
 			log.Errorf("api: removing session fragment %s: %s", name, err)
 		}
 	}
@@ -617,12 +643,12 @@ func (s *Server) reportNow(w http.ResponseWriter, r *http.Request) {
 
 // rulesPath is the API-managed prefix-rules fragment. The leading underscore
 // keeps it out of session reconciliation.
-func (s *Server) rulesPath() string {
-	return filepath.Join(s.SessionsDir, "_prefix-rules.yml")
+func (s *Server) rulesPath(dir string) string {
+	return filepath.Join(dir, "_prefix-rules.yml")
 }
 
-func (s *Server) writeRulesFragment(rules []map[string]any) error {
-	if err := os.MkdirAll(s.SessionsDir, 0755); err != nil {
+func (s *Server) writeRulesFragment(dir string, rules []map[string]any) error {
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
 	b, err := yaml.Marshal(map[string]any{"prefix-rules": rules})
@@ -630,11 +656,11 @@ func (s *Server) writeRulesFragment(rules []map[string]any) error {
 		return err
 	}
 	header := []byte("# Managed by pathvector API - do not edit\n")
-	return os.WriteFile(s.rulesPath(), append(header, b...), 0644)
+	return os.WriteFile(s.rulesPath(dir), append(header, b...), 0644)
 }
 
 func (s *Server) getRules(w http.ResponseWriter, r *http.Request) {
-	b, err := os.ReadFile(s.rulesPath())
+	b, err := os.ReadFile(s.rulesPath(s.sessionsDir()))
 	if os.IsNotExist(err) {
 		writeJSON(w, http.StatusOK, map[string]any{"rules": []any{}})
 		return
@@ -667,21 +693,22 @@ func (s *Server) putRules(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	old, readErr := os.ReadFile(s.rulesPath())
+	dir := s.sessionsDir()
+	old, readErr := os.ReadFile(s.rulesPath(dir))
 	existed := readErr == nil
 	rollback := func() {
 		if existed {
-			if err := os.WriteFile(s.rulesPath(), old, 0644); err != nil {
+			if err := os.WriteFile(s.rulesPath(dir), old, 0644); err != nil {
 				log.Errorf("api: restoring rules fragment: %s", err)
 			}
 		} else {
-			_ = os.Remove(s.rulesPath())
+			_ = os.Remove(s.rulesPath(dir))
 		}
 	}
 
 	if len(in.Rules) == 0 {
-		_ = os.Remove(s.rulesPath())
-	} else if err := s.writeRulesFragment(in.Rules); err != nil {
+		_ = os.Remove(s.rulesPath(dir))
+	} else if err := s.writeRulesFragment(dir, in.Rules); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -702,17 +729,18 @@ func (s *Server) deleteRules(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	old, err := os.ReadFile(s.rulesPath())
+	dir := s.sessionsDir()
+	old, err := os.ReadFile(s.rulesPath(dir))
 	if err != nil {
 		writeErr(w, http.StatusNotFound, fmt.Errorf("no API-managed prefix rules"))
 		return
 	}
-	if err := os.Remove(s.rulesPath()); err != nil {
+	if err := os.Remove(s.rulesPath(dir)); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
-		if werr := os.WriteFile(s.rulesPath(), old, 0644); werr != nil {
+		if werr := os.WriteFile(s.rulesPath(dir), old, 0644); werr != nil {
 			log.Errorf("api: restoring rules fragment: %s", werr)
 		}
 		writeErr(w, http.StatusInternalServerError, err)
@@ -763,8 +791,9 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 
 	// Snapshot the sessions directory for rollback
+	dir := s.sessionsDir()
 	snapshot := map[string][]byte{}
-	frags, _ := filepath.Glob(filepath.Join(s.SessionsDir, "*.yml"))
+	frags, _ := filepath.Glob(filepath.Join(dir, "*.yml"))
 	for _, f := range frags {
 		if b, err := os.ReadFile(f); err == nil {
 			snapshot[f] = b
@@ -776,7 +805,7 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 				log.Errorf("api: restoring fragment %s: %s", f, err)
 			}
 		}
-		current, _ := filepath.Glob(filepath.Join(s.SessionsDir, "*.yml"))
+		current, _ := filepath.Glob(filepath.Join(dir, "*.yml"))
 		for _, f := range current {
 			if _, ok := snapshot[f]; !ok {
 				_ = os.Remove(f)
@@ -786,17 +815,17 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 
 	var created, updated, deleted, unchanged []string
 
-	if err := os.MkdirAll(s.SessionsDir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	for name, fields := range in.Sessions {
-		p := s.fragmentPath(name)
+		p := s.fragmentPath(dir, name)
 		if old, ok := snapshot[p]; ok && fragmentEquals(old, name, fields) {
 			unchanged = append(unchanged, name)
 			continue
 		}
-		if err := s.writeFragment(name, fields); err != nil {
+		if err := s.writeFragment(dir, name, fields); err != nil {
 			restore()
 			writeErr(w, http.StatusInternalServerError, err)
 			return
@@ -828,8 +857,8 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 
 	if in.Rules != nil {
 		if len(*in.Rules) == 0 {
-			_ = os.Remove(s.rulesPath())
-		} else if err := s.writeRulesFragment(*in.Rules); err != nil {
+			_ = os.Remove(s.rulesPath(dir))
+		} else if err := s.writeRulesFragment(dir, *in.Rules); err != nil {
 			restore()
 			writeErr(w, http.StatusInternalServerError, err)
 			return
