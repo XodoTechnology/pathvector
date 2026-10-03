@@ -133,8 +133,9 @@ Functions are callable from peer/template hooks (`pre-export`,
 - Pipelines: `import_communitys(peer_asn, pop_id, src_id)` (call with
   `pop_id`/`pop-id` and a per-template source id like 20/30/40/50),
   `downstream_communitys`, `export_communitys(peer_asn)`, `export_ix_communitys(ix_id)`
-- `pop-id: N` renders `define pop_id = N;` — drop any `global-config` copy of
-  it when enabling this
+- `pop-id: N` renders `define pop_id = N;`. A hand-written `define pop_id` in
+  `global-config` works instead — set one or the other (pathvector validates
+  this and fails cleanly if both or neither are present)
 
 ### Reporting (router → panel)
 

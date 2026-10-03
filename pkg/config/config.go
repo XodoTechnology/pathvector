@@ -399,7 +399,7 @@ type Config struct {
 	SkipIRR       bool `yaml:"skip-irr" description:"Skip bgpq4/IRR queries (filter-irr, auto-as-set-members) - IRR prefix-set filters are omitted" default:"false"`
 
 	ActionCommunities bool `yaml:"action-communities" description:"Render the action/informational community function library (prepend/no-announce/RPKI marking helpers) into the global config" default:"false"`
-	PopID             int  `yaml:"pop-id" description:"PoP/site ID used by the action community library (rendered as 'define pop_id = N')" default:"0"`
+	PopID             *int `yaml:"pop-id" description:"PoP/site ID used by the action community library (rendered as 'define pop_id = N'; alternatively define pop_id yourself via global-config)" default:"-"`
 
 	PrefixRules   []*PrefixRule `yaml:"prefix-rules" description:"Per-prefix routing policies applied at export on matching sessions"`
 	KeepFiltered  bool          `yaml:"keep-filtered" description:"Should filtered routes be kept in memory?" default:"false"`

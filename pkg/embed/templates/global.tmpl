@@ -380,7 +380,9 @@ function accept_local() {
 # Function names (incl. the "communitys" spelling) are stable: peer hooks
 # (pre-export, post-import-filter, ...) call these directly.
 
-define pop_id = {{ .PopID }};
+{{ if .PopID -}}
+define pop_id = {{ IntDeref .PopID }};
+{{- end }}
 
 # --- Action: do-not-announce ---
 function reject_general(int peer_asn) {

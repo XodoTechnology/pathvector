@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -172,6 +173,11 @@ func mergeFragment[V any](what string, filename string, dst map[string]V, src ma
 	return nil
 }
 
+// popIDDefineRegex matches a user-supplied `define pop_id = ...` inside
+// global-config, so the action-community library can reference it without
+// pathvector emitting a duplicate define
+var popIDDefineRegex = regexp.MustCompile(`define\s+pop_id\b`)
+
 // mergeIncludes merges config fragments matched by the config's include globs
 func mergeIncludes(c *config.Config, baseDir string) error {
 	for _, pattern := range c.Include {
@@ -315,6 +321,19 @@ func load(configBlob []byte, baseDir string) (*config.Config, error) {
 			return nil, fmt.Errorf("hostname is not defined and unable to get system hostname: %s", err)
 		}
 		c.Hostname = hostname
+	}
+
+	// The action community library references a global `pop_id` symbol - it must
+	// come from exactly one place: the pop-id option or a user-written
+	// `define pop_id` in global-config
+	if c.ActionCommunities {
+		hasPopDefine := popIDDefineRegex.MatchString(c.GlobalConfig)
+		if c.PopID != nil && hasPopDefine {
+			return nil, fmt.Errorf("pop-id is set and pop_id is also defined in global-config - use only one")
+		}
+		if c.PopID == nil && !hasPopDefine {
+			return nil, fmt.Errorf("action-communities requires pop-id to be set, or a 'define pop_id = N;' in global-config")
+		}
 	}
 
 	if c.Stun {

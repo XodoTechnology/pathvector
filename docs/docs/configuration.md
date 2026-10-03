@@ -335,11 +335,11 @@ Render the action/informational community function library (prepend/no-announce/
 
 ### `pop-id`
 
-PoP/site ID used by the action community library (rendered as 'define pop_id = N')
+PoP/site ID used by the action community library (rendered as 'define pop_id = N'; alternatively define pop_id yourself via global-config)
 
 | Type | Default | Validation |
 |------|---------|------------|
-| int   | 0      |          |
+| int   |       |          |
 
 ### `prefix-rules`
 
