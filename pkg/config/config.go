@@ -105,6 +105,23 @@ type PrefixRule struct {
 	Kind      string `yaml:"-" description:"-"`
 }
 
+// CommunityIDs maps the semantic roles used by the action/informational
+// community library to the middle element of (ASN, id, value) large
+// communities. Zero values fall back to defaults in process.Load.
+type CommunityIDs struct {
+	NoAnnounceAS   int   `yaml:"no-announce-as" description:"LC id for 'do not announce to AS X' (payload = peer ASN)"`
+	NoAnnounceIX   int   `yaml:"no-announce-ix" description:"LC id for 'do not announce at IX X' (payload = IX id)"`
+	PrependGeneral int   `yaml:"prepend-general" description:"LC id for general prepending (payload = prepend count 1-3)"`
+	PrependAS      []int `yaml:"prepend-as" description:"LC ids for per-AS prepending, index 0/1/2 = prepend x1/x2/x3 (payload = peer ASN)"`
+	PrependIX      []int `yaml:"prepend-ix" description:"LC ids for per-IX prepending, index 0/1/2 = prepend x1/x2/x3 (payload = IX id)"`
+	InfoSource     int   `yaml:"info-source" description:"Informational LC id marking origin/import source"`
+	InfoIX         int   `yaml:"info-ix" description:"Informational LC id marking learned-at-IX"`
+	InfoUpstream   int   `yaml:"info-upstream" description:"Informational LC id marking learned-via-upstream"`
+	InfoRPKI       int   `yaml:"info-rpki" description:"Informational LC id marking RPKI state (payload 100/101/102 = valid/unknown/invalid)"`
+	DownstreamTag  int   `yaml:"downstream-tag" description:"Tag value for downstream marking (standard + large communities)"`
+	UpstreamTag    int   `yaml:"upstream-tag" description:"Tag value for upstream marking (standard + large communities)"`
+}
+
 // Peer stores a single peer config
 type Peer struct {
 	Template *string `yaml:"template" description:"Configuration template" default:"-"`
@@ -400,6 +417,8 @@ type Config struct {
 
 	ActionCommunities bool `yaml:"action-communities" description:"Render the action/informational community function library (prepend/no-announce/RPKI marking helpers) into the global config" default:"false"`
 	PopID             *int `yaml:"pop-id" description:"PoP/site ID used by the action community library (rendered as 'define pop_id = N'; alternatively define pop_id yourself via global-config)" default:"-"`
+
+	CommunityIDs *CommunityIDs `yaml:"community-ids" description:"Community numbering used by the action community library (all values have defaults)" default:"-"`
 
 	PrefixRules   []*PrefixRule `yaml:"prefix-rules" description:"Per-prefix routing policies applied at export on matching sessions"`
 	KeepFiltered  bool          `yaml:"keep-filtered" description:"Should filtered routes be kept in memory?" default:"false"`

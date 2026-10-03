@@ -130,6 +130,11 @@ Functions are callable from peer/template hooks (`pre-export`,
   `(ASN,73x,ix)` prepend-at-IX
 - Informational: `(ASN,411,x)` source/origin · `(ASN,412,ix)` learned-at-IX ·
   `(ASN,414,x)` learned-via-upstream · `(ASN,511,100-102)` RPKI valid/unknown/invalid
+- All community numbers are defaults — override any role via `community-ids:`
+  (`no-announce-as`, `no-announce-ix`, `prepend-general`, `prepend-as`,
+  `prepend-ix`, `info-source`, `info-ix`, `info-upstream`, `info-rpki`,
+  `downstream-tag`, `upstream-tag`). Prepend lists may be any length —
+  `[a,b]` renders two prepend levels, `[a,b,c]` three.
 - Pipelines: `import_communitys(peer_asn, pop_id, src_id)` (call with
   `pop_id`/`pop-id` and a per-template source id like 20/30/40/50),
   `downstream_communitys`, `export_communitys(peer_asn)`, `export_ix_communitys(ix_id)`

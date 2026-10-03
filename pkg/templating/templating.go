@@ -227,6 +227,10 @@ var funcMap = template.FuncMap{
 		return strings.Split(s, delim)[0]
 	},
 
+	"Add": func(a, b int) int {
+		return a + b
+	},
+
 	"Last": func(index, len int) bool {
 		return index+1 == len
 	},

@@ -341,6 +341,14 @@ PoP/site ID used by the action community library (rendered as 'define pop_id = N
 |------|---------|------------|
 | int   |       |          |
 
+### `community-ids`
+
+Community numbering used by the action community library (all values have defaults)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| [CommunityIDs](#communityids-1)   |       |          |
+
 ### `prefix-rules`
 
 Per-prefix routing policies applied at export on matching sessions
@@ -574,6 +582,96 @@ Number of missed packets for the state to be declared down
 | Type | Default | Validation |
 |------|---------|------------|
 | uint   | 10      |          |
+
+
+## CommunityIDs
+### `no-announce-as`
+
+LC id for 'do not announce to AS X' (payload = peer ASN)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| int   |       |          |
+
+### `no-announce-ix`
+
+LC id for 'do not announce at IX X' (payload = IX id)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| int   |       |          |
+
+### `prepend-general`
+
+LC id for general prepending (payload = prepend count 1-3)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| int   |       |          |
+
+### `prepend-as`
+
+LC ids for per-AS prepending, index 0/1/2 = prepend x1/x2/x3 (payload = peer ASN)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| []int   |       |          |
+
+### `prepend-ix`
+
+LC ids for per-IX prepending, index 0/1/2 = prepend x1/x2/x3 (payload = IX id)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| []int   |       |          |
+
+### `info-source`
+
+Informational LC id marking origin/import source
+
+| Type | Default | Validation |
+|------|---------|------------|
+| int   |       |          |
+
+### `info-ix`
+
+Informational LC id marking learned-at-IX
+
+| Type | Default | Validation |
+|------|---------|------------|
+| int   |       |          |
+
+### `info-upstream`
+
+Informational LC id marking learned-via-upstream
+
+| Type | Default | Validation |
+|------|---------|------------|
+| int   |       |          |
+
+### `info-rpki`
+
+Informational LC id marking RPKI state (payload 100/101/102 = valid/unknown/invalid)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| int   |       |          |
+
+### `downstream-tag`
+
+Tag value for downstream marking (standard + large communities)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| int   |       |          |
+
+### `upstream-tag`
+
+Tag value for upstream marking (standard + large communities)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| int   |       |          |
 
 
 ## Kernel

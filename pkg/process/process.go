@@ -178,6 +178,74 @@ func mergeFragment[V any](what string, filename string, dst map[string]V, src ma
 // pathvector emitting a duplicate define
 var popIDDefineRegex = regexp.MustCompile(`define\s+pop_id\b`)
 
+// defaultCommunityIDs is the community taxonomy used when action-communities
+// is enabled - every role can be overridden via the community-ids map
+var defaultCommunityIDs = config.CommunityIDs{
+	NoAnnounceAS:   911,
+	NoAnnounceIX:   739,
+	PrependGeneral: 711,
+	PrependAS:      []int{721, 722, 723},
+	PrependIX:      []int{731, 732, 733},
+	InfoSource:     411,
+	InfoIX:         412,
+	InfoUpstream:   414,
+	InfoRPKI:       511,
+	DownstreamTag:  99,
+	UpstreamTag:    90,
+}
+
+// applyCommunityDefaults fills unset community-ids roles with defaults and
+// validates the result
+func applyCommunityDefaults(c *config.Config) error {
+	if c.CommunityIDs == nil {
+		ids := defaultCommunityIDs
+		c.CommunityIDs = &ids
+		return nil
+	}
+	ids, d := c.CommunityIDs, defaultCommunityIDs
+	if ids.NoAnnounceAS == 0 {
+		ids.NoAnnounceAS = d.NoAnnounceAS
+	}
+	if ids.NoAnnounceIX == 0 {
+		ids.NoAnnounceIX = d.NoAnnounceIX
+	}
+	if ids.PrependGeneral == 0 {
+		ids.PrependGeneral = d.PrependGeneral
+	}
+	if len(ids.PrependAS) == 0 {
+		ids.PrependAS = d.PrependAS
+	}
+	if len(ids.PrependIX) == 0 {
+		ids.PrependIX = d.PrependIX
+	}
+	if ids.InfoSource == 0 {
+		ids.InfoSource = d.InfoSource
+	}
+	if ids.InfoIX == 0 {
+		ids.InfoIX = d.InfoIX
+	}
+	if ids.InfoUpstream == 0 {
+		ids.InfoUpstream = d.InfoUpstream
+	}
+	if ids.InfoRPKI == 0 {
+		ids.InfoRPKI = d.InfoRPKI
+	}
+	if ids.DownstreamTag == 0 {
+		ids.DownstreamTag = d.DownstreamTag
+	}
+	if ids.UpstreamTag == 0 {
+		ids.UpstreamTag = d.UpstreamTag
+	}
+	for _, list := range [][]int{ids.PrependAS, ids.PrependIX} {
+		for _, id := range list {
+			if id <= 0 {
+				return fmt.Errorf("community-ids: prepend ids must be positive, got %d", id)
+			}
+		}
+	}
+	return nil
+}
+
 // mergeIncludes merges config fragments matched by the config's include globs
 func mergeIncludes(c *config.Config, baseDir string) error {
 	for _, pattern := range c.Include {
@@ -333,6 +401,9 @@ func load(configBlob []byte, baseDir string) (*config.Config, error) {
 		}
 		if c.PopID == nil && !hasPopDefine {
 			return nil, fmt.Errorf("action-communities requires pop-id to be set, or a 'define pop_id = N;' in global-config")
+		}
+		if err := applyCommunityDefaults(&c); err != nil {
+			return nil, err
 		}
 	}
 
