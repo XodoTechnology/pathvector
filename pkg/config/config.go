@@ -394,6 +394,9 @@ type Config struct {
 	BGPQArgs    string `yaml:"bgpq-args" description:"Additional command line arguments to pass to bgpq4" default:""`
 	BIRDTimeout int    `yaml:"bird-timeout" description:"Timeout in seconds for BIRD socket commands (dial capped at 10s)" default:"60"`
 
+	SkipPeeringDB bool `yaml:"skip-peeringdb" description:"Skip PeeringDB queries (auto-import-limits, auto-as-set, NVRS) - peers render with default limits and no auto as-set" default:"false"`
+	SkipIRR       bool `yaml:"skip-irr" description:"Skip bgpq4/IRR queries (filter-irr, auto-as-set-members) - IRR prefix-set filters are omitted" default:"false"`
+
 	PrefixRules   []*PrefixRule `yaml:"prefix-rules" description:"Per-prefix routing policies applied at export on matching sessions"`
 	KeepFiltered  bool          `yaml:"keep-filtered" description:"Should filtered routes be kept in memory?" default:"false"`
 	MergePaths    bool          `yaml:"merge-paths" description:"Should best and equivalent non-best routes be imported to build ECMP routes?" default:"false"`

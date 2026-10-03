@@ -713,7 +713,7 @@ func peer(peerName string, peerData *config.Peer, c *config.Config, wg *sync.Wai
 	log.Debugf("Processing AS%d %s", *peerData.ASN, peerName)
 
 	// If a PeeringDB query is required
-	if *peerData.AutoImportLimits || *peerData.AutoASSet {
+	if (*peerData.AutoImportLimits || *peerData.AutoASSet) && !c.SkipPeeringDB {
 		log.Debugf("[%s] has auto-import-limits or auto-as-set, querying PeeringDB", peerName)
 
 		if err := peeringdb.Update(peerData, c.PeeringDBQueryTimeout, c.PeeringDBAPIKey, true); err != nil {
@@ -723,13 +723,13 @@ func peer(peerName string, peerData *config.Peer, c *config.Config, wg *sync.Wai
 	} // end peeringdb query enabled
 
 	// Build IRR prefix sets
-	if *peerData.FilterIRR {
+	if *peerData.FilterIRR && !c.SkipIRR {
 		if err := irr.Update(peerData, c.IRRServer, c.IRRQueryTimeout, c.BGPQArgs); err != nil {
 			errCh <- fmt.Errorf("[%s] %s", peerName, err)
 			return
 		}
 	}
-	if *peerData.AutoASSetMembers {
+	if *peerData.AutoASSetMembers && !c.SkipIRR {
 		membersFromIRR, err := irr.ASMembers(*peerData.ASSet, c.IRRServer, c.IRRQueryTimeout, c.BGPQArgs)
 		if err != nil {
 			errCh <- fmt.Errorf("[%s] %s", peerName, err)
@@ -743,7 +743,9 @@ func peer(peerName string, peerData *config.Peer, c *config.Config, wg *sync.Wai
 			peerData.ASSetMembers = &newASSetMembers
 		}
 	}
-	if *peerData.FilterASSet && (peerData.ASSetMembers == nil || len(*peerData.ASSetMembers) < 1) {
+	// When IRR queries are skipped, members can only come from an explicit
+	// as-set-members list - an empty result just means no as-set filter
+	if *peerData.FilterASSet && !c.SkipIRR && (peerData.ASSetMembers == nil || len(*peerData.ASSetMembers) < 1) {
 		errCh <- fmt.Errorf("[%s] has filter-as-set enabled but no members in its as-set", peerName)
 		return
 	}
@@ -779,8 +781,17 @@ func peer(peerName string, peerData *config.Peer, c *config.Config, wg *sync.Wai
 	log.Debugf("[%s] Wrote config", peerName)
 }
 
+// RunOptions controls how Run executes the data generation procedure
+type RunOptions struct {
+	NoConfigure bool // render and validate but don't reconfigure BIRD
+	DryRun      bool // full pipeline including bird -p, but don't apply
+	Withdraw    bool // withdraw all routes by commenting out peer files
+	SkipPDB     bool // skip PeeringDB queries for this run (auto-import-limits, auto-as-set, NVRS)
+	SkipIRR     bool // skip bgpq4/IRR queries for this run (filter-irr, auto-as-set-members)
+}
+
 // Run runs the full data generation procedure
-func Run(configFilename, lockFile, version string, noConfigure, dryRun, withdraw bool) error {
+func Run(configFilename, lockFile, version string, opts RunOptions) error {
 	// Check lockfile
 	if lockFile != "" {
 		if _, err := os.Stat(lockFile); err == nil {
@@ -808,7 +819,26 @@ func Run(configFilename, lockFile, version string, noConfigure, dryRun, withdraw
 	}
 	log.Debug("Finished loading config")
 
-	// Run NVRS query
+	// Per-run skip flags override the config - once set on c, peer() sees them
+	if opts.SkipPDB && !c.SkipPeeringDB {
+		c.SkipPeeringDB = true
+	}
+	if opts.SkipIRR && !c.SkipIRR {
+		c.SkipIRR = true
+	}
+	if c.SkipPeeringDB {
+		log.Warn("Skipping PeeringDB queries - auto-import-limits and auto-as-set peers will render with defaults")
+	}
+	if c.SkipIRR {
+		log.Warn("Skipping bgpq4/IRR queries - filter-irr and auto-as-set-members will render without IRR data")
+	}
+
+	// Run NVRS query. When skipping PeeringDB, leave QueryNVRS false so the
+	// template omits the (empty) ASN set entirely.
+	if c.QueryNVRS && c.SkipPeeringDB {
+		log.Warn("Skipping NVRS query - never-via-route-servers filter will not be rendered")
+		c.QueryNVRS = false
+	}
 	if c.QueryNVRS {
 		var err error
 		c.NVRSASNs, err = peeringdb.NeverViaRouteServers(c.PeeringDBQueryTimeout, c.PeeringDBAPIKey)
@@ -863,7 +893,7 @@ func Run(configFilename, lockFile, version string, noConfigure, dryRun, withdraw
 	// Print global config
 	util.PrintStructInfo("pathvector.global", c)
 
-	if withdraw {
+	if opts.Withdraw {
 		log.Warn("DANGER: withdraw flag is set, withdrawing all routes")
 		c.NoAnnounce = true
 	}
@@ -893,7 +923,7 @@ func Run(configFilename, lockFile, version string, noConfigure, dryRun, withdraw
 		return fmt.Errorf("copying Pathvector config file to cache directory: %v", err)
 	}
 
-	if !dryRun {
+	if !opts.DryRun {
 		// Write protocol name map
 		names := templating.ProtocolNames()
 		j, err := json.Marshal(names)
@@ -919,7 +949,7 @@ func Run(configFilename, lockFile, version string, noConfigure, dryRun, withdraw
 			}
 		}
 
-		if err := bird.MoveCacheAndReconfigure(c.BIRDDirectory, c.CacheDirectory, c.BIRDSocket, noConfigure, time.Duration(c.BIRDTimeout)*time.Second); err != nil {
+		if err := bird.MoveCacheAndReconfigure(c.BIRDDirectory, c.CacheDirectory, c.BIRDSocket, opts.NoConfigure, time.Duration(c.BIRDTimeout)*time.Second); err != nil {
 			return err
 		}
 	} // end dry run check

@@ -9,10 +9,14 @@ import (
 
 var (
 	withdraw bool
+	skipPDB  bool
+	skipIRR  bool
 )
 
 func init() {
 	generateCmd.Flags().BoolVarP(&withdraw, "withdraw", "w", false, "Withdraw all routes")
+	generateCmd.Flags().BoolVar(&skipPDB, "skip-peeringdb", false, "Skip PeeringDB queries (auto-import-limits, auto-as-set, NVRS)")
+	generateCmd.Flags().BoolVar(&skipIRR, "skip-irr", false, "Skip bgpq4/IRR queries (filter-irr, auto-as-set-members)")
 	rootCmd.AddCommand(generateCmd)
 }
 
@@ -21,7 +25,13 @@ var generateCmd = &cobra.Command{
 	Short:   "Generate router configuration",
 	Aliases: []string{"gen", "g"},
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := process.Run(configFile, lockFile, version, noConfigure, dryRun, withdraw); err != nil {
+		if err := process.Run(configFile, lockFile, version, process.RunOptions{
+			NoConfigure: noConfigure,
+			DryRun:      dryRun,
+			Withdraw:    withdraw,
+			SkipPDB:     skipPDB,
+			SkipIRR:     skipIRR,
+		}); err != nil {
 			log.Fatal(err)
 		}
 	},

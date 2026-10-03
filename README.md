@@ -94,6 +94,10 @@ report-url: https://panel.example.com/api/v1/bgp/report
 report-key: PANEL_KEY
 report-interval: 60
 report-router: edge1.example.com
+
+# Optional: degrade gracefully when external data sources are unreachable
+# skip-peeringdb: true     # skip PeeringDB lookups (auto-import-limits, auto-as-set, NVRS)
+# skip-irr: true           # skip bgpq4/IRR lookups (filter-irr, auto-as-set-members)
 ```
 
 Notes:

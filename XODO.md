@@ -21,6 +21,8 @@ report-key: <panel report key>
 report-interval: 60
 report-router: edge1.fra                       # defaults to hostname
 bird-timeout: 60                               # seconds, BIRD socket deadline
+# skip-peeringdb: true                         # skip PeeringDB lookups entirely (persisted)
+# skip-irr: true                               # skip bgpq4/IRR lookups entirely (persisted)
 include:
   - sessions.d/*.yml                           # required — API fragments land here
 ```
@@ -34,7 +36,8 @@ glob — without that, fragments would be written but never loaded.
 ## API surface (all JSON; `Authorization: Bearer <api-key>`)
 
 Mutations are serialized, run the full render → `bird -p` → `configure`
-pipeline, roll back on failure, and accept `?dry_run=1`.
+pipeline, roll back on failure, and accept `?dry_run=1`. All mutating
+endpoints also accept `?skip_pdb=1` and `?skip_irr=1` (see below).
 
 | Method/Path | Purpose |
 |---|---|
@@ -94,6 +97,25 @@ names — override the defaults), optional `asn`/`count` for prepend overrides.
 Generic `reject`/`blackhole`/`prepend` actions work too; `targets` selects by
 template name, empty = all sessions.
 
+### Skipping external lookups (`skip_pdb` / `skip_irr`)
+
+Every apply re-queries PeeringDB (`auto-import-limits`, `auto-as-set`, NVRS)
+and bgpq4 (`filter-irr`, `auto-as-set-members`) — that's the bulk of mutation
+latency, and a dead pdb-cache/IRR box blocks *all* API writes. Two switches
+degrade gracefully when they're down:
+
+- **Per-request** (transient, e.g. an admin "apply anyway" button):
+  `?skip_pdb=1` / `?skip_irr=1` on any mutating endpoint or `POST /v1/generate`.
+- **Persistent**: `skip-peeringdb: true` / `skip-irr: true` in pathvector.yml
+  (settable via `PUT /v1/config`), or `pathvector generate --skip-peeringdb --skip-irr`.
+
+Semantics are fail-open: `auto-import-limits` peers get the default limits
+(1500000/1000000), `auto-as-set` renders no as-set, `filter-irr` peers get no
+IRR prefix-list check, NVRS/filter-as-set blocks are omitted. This is intended
+as an *admin-side escape hatch* — XodoPanel should expose it only to admins
+(a "skip external lookups" toggle on apply/reconcile), not to customers, since
+it weakens prefix filtering on every affected session.
+
 ### Reporting (router → panel)
 
 - Auto-push: `report-url` + `report-key` + `report-interval` POSTs the exact
@@ -128,6 +150,10 @@ template name, empty = all sessions.
 6. **Bootstrap path** — keep the existing `GET /api/pathvector.yml` renderer
    for initial provisioning; router can `PUT /v1/config` it once, then the
    panel switches to granular ops.
+7. **Admin "apply anyway" toggle** — admin-only checkbox surfacing
+   `?skip_pdb=1`/`?skip_irr=1` on reconcile/session writes for when PeeringDB
+   or the IRR cache is unreachable; optionally set `skip-peeringdb`/`skip-irr`
+   persistently via `PUT /v1/config` on chronically-isolated routers.
 7. **Multi-router** — `bgp_sessions.router` already scopes sessions per router;
    the API calls must go to each router's own pathvector instance (per-router
    `api-listen`/`api-key`/`report-router` naming).

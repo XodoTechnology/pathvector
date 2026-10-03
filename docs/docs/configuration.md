@@ -309,6 +309,22 @@ Timeout in seconds for BIRD socket commands (dial capped at 10s)
 |------|---------|------------|
 | int   | 60      |          |
 
+### `skip-peeringdb`
+
+Skip PeeringDB queries (auto-import-limits, auto-as-set, NVRS) - peers render with default limits and no auto as-set
+
+| Type | Default | Validation |
+|------|---------|------------|
+| bool   | false      |          |
+
+### `skip-irr`
+
+Skip bgpq4/IRR queries (filter-irr, auto-as-set-members) - IRR prefix-set filters are omitted
+
+| Type | Default | Validation |
+|------|---------|------------|
+| bool   | false      |          |
+
 ### `prefix-rules`
 
 Per-prefix routing policies applied at export on matching sessions

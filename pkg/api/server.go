@@ -176,10 +176,22 @@ func birdTimeout(c *config.Config) time.Duration {
 	return bird.DefaultCommandTimeout
 }
 
+// reqOpts extracts the common mutation query flags: ?dry_run=1 renders and
+// validates without applying; ?skip_pdb=1 and ?skip_irr=1 run the apply while
+// skipping PeeringDB/bgpq4 lookups (useful when those services are down)
+func reqOpts(r *http.Request) (dryRun, skipPDB, skipIRR bool) {
+	q := r.URL.Query()
+	return q.Get("dry_run") == "1", q.Get("skip_pdb") == "1", q.Get("skip_irr") == "1"
+}
+
 // apply runs the full generate pipeline against the on-disk config and records
 // the outcome for /v1/status. Callers must hold s.mu.
-func (s *Server) apply(dryRun bool) error {
-	err := process.Run(s.ConfigFile, "", s.Version, false, dryRun, false)
+func (s *Server) apply(dryRun, skipPDB, skipIRR bool) error {
+	err := process.Run(s.ConfigFile, "", s.Version, process.RunOptions{
+		DryRun:  dryRun,
+		SkipPDB: skipPDB,
+		SkipIRR: skipIRR,
+	})
 	if err != nil {
 		s.lastApplyErr = err.Error()
 	} else {
@@ -399,7 +411,7 @@ func (s *Server) putSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
+	if err := s.apply(reqOpts(r)); err != nil {
 		s.rollbackFragment(dir, name, old, existed)
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -447,7 +459,7 @@ func (s *Server) patchSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
+	if err := s.apply(reqOpts(r)); err != nil {
 		s.rollbackFragment(dir, name, old, true)
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -475,7 +487,7 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
+	if err := s.apply(reqOpts(r)); err != nil {
 		s.rollbackFragment(dir, name, old, true)
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -503,7 +515,7 @@ func (s *Server) setSessionDisabled(disabled bool) http.HandlerFunc {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}
-		if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
+		if err := s.apply(reqOpts(r)); err != nil {
 			s.rollbackFragment(dir, name, old, true)
 			writeErr(w, http.StatusInternalServerError, err)
 			return
@@ -564,7 +576,7 @@ func (s *Server) putConfig(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
+	if err := s.apply(reqOpts(r)); err != nil {
 		if len(old) > 0 {
 			if werr := os.WriteFile(s.ConfigFile, old, 0644); werr != nil {
 				log.Errorf("api: restoring config file: %s", werr)
@@ -579,7 +591,7 @@ func (s *Server) putConfig(w http.ResponseWriter, r *http.Request) {
 func (s *Server) generate(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
+	if err := s.apply(reqOpts(r)); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -717,7 +729,7 @@ func (s *Server) putRules(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
+	if err := s.apply(reqOpts(r)); err != nil {
 		rollback()
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -739,7 +751,7 @@ func (s *Server) deleteRules(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
+	if err := s.apply(reqOpts(r)); err != nil {
 		if werr := os.WriteFile(s.rulesPath(dir), old, 0644); werr != nil {
 			log.Errorf("api: restoring rules fragment: %s", werr)
 		}
@@ -870,7 +882,7 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	if err := s.apply(r.URL.Query().Get("dry_run") == "1"); err != nil {
+	if err := s.apply(reqOpts(r)); err != nil {
 		restore()
 		writeErr(w, http.StatusInternalServerError, err)
 		return
