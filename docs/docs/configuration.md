@@ -325,6 +325,22 @@ Skip bgpq4/IRR queries (filter-irr, auto-as-set-members) - IRR prefix-set filter
 |------|---------|------------|
 | bool   | false      |          |
 
+### `action-communities`
+
+Render the action/informational community function library (prepend/no-announce/RPKI marking helpers) into the global config
+
+| Type | Default | Validation |
+|------|---------|------------|
+| bool   | false      |          |
+
+### `pop-id`
+
+PoP/site ID used by the action community library (rendered as 'define pop_id = N')
+
+| Type | Default | Validation |
+|------|---------|------------|
+| int   | 0      |          |
+
 ### `prefix-rules`
 
 Per-prefix routing policies applied at export on matching sessions

@@ -23,6 +23,8 @@ report-router: edge1.fra                       # defaults to hostname
 bird-timeout: 60                               # seconds, BIRD socket deadline
 # skip-peeringdb: true                         # skip PeeringDB lookups entirely (persisted)
 # skip-irr: true                               # skip bgpq4/IRR lookups entirely (persisted)
+# action-communities: true                     # built-in community library (see below)
+# pop-id: 424                                  # site ID → `define pop_id`
 include:
   - sessions.d/*.yml                           # required — API fragments land here
 ```
@@ -115,6 +117,24 @@ IRR prefix-list check, NVRS/filter-as-set blocks are omitted. This is intended
 as an *admin-side escape hatch* — XodoPanel should expose it only to admins
 (a "skip external lookups" toggle on apply/reconcile), not to customers, since
 it weakens prefix filtering on every affected session.
+
+### Built-in community library (`action-communities`)
+
+`action-communities: true` renders an ASN-parameterized community framework
+into the global config — replaces hand-maintained `manual_global_filters.conf`.
+Functions are callable from peer/template hooks (`pre-export`,
+`post-import-filter`, `pre-export-final`) with `<pathvector.asn>` substitution:
+
+- Action: `(ASN,911,asn)` no-announce-to-AS · `(ASN,739,ix)` no-announce-at-IX ·
+  `(ASN,711-713,*)` prepend ×1-3 everywhere · `(ASN,72x,asn)` prepend-to-AS ·
+  `(ASN,73x,ix)` prepend-at-IX
+- Informational: `(ASN,411,x)` source/origin · `(ASN,412,ix)` learned-at-IX ·
+  `(ASN,414,x)` learned-via-upstream · `(ASN,511,100-102)` RPKI valid/unknown/invalid
+- Pipelines: `import_communitys(peer_asn, pop_id, src_id)` (call with
+  `pop_id`/`pop-id` and a per-template source id like 20/30/40/50),
+  `downstream_communitys`, `export_communitys(peer_asn)`, `export_ix_communitys(ix_id)`
+- `pop-id: N` renders `define pop_id = N;` — drop any `global-config` copy of
+  it when enabling this
 
 ### Reporting (router → panel)
 

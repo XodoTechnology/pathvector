@@ -375,6 +375,158 @@ function accept_local() {
   {{- end }}
 }
 
+{{ if .ActionCommunities -}}
+# ---- Action & informational community library ----
+# Function names (incl. the "communitys" spelling) are stable: peer hooks
+# (pre-export, post-import-filter, ...) call these directly.
+
+define pop_id = {{ .PopID }};
+
+# --- Action: do-not-announce ---
+function reject_general(int peer_asn) {
+    if ((ASN, 911, peer_asn) ~ bgp_large_community) then _reject("do not announce to AS");
+}
+function reject_ix(int ix_id) {
+    if ((ASN, 739, ix_id) ~ bgp_large_community) then _reject("do not announce at IX");
+}
+
+# --- Action: prepending ---
+function process_prepend_general() {
+    if ((ASN, 711, 1) ~ bgp_large_community) then {
+        bgp_path.prepend(ASN);
+        bgp_large_community.delete([(ASN, 711, *)]);
+        bgp_large_community.delete([(ASN, 712, *)]);
+        bgp_large_community.delete([(ASN, 713, *)]);
+    }
+    if ((ASN, 711, 2) ~ bgp_large_community) then {
+        bgp_path.prepend(ASN);
+        bgp_path.prepend(ASN);
+        bgp_large_community.delete([(ASN, 711, *)]);
+        bgp_large_community.delete([(ASN, 712, *)]);
+        bgp_large_community.delete([(ASN, 713, *)]);
+    }
+    if ((ASN, 711, 3) ~ bgp_large_community) then {
+        bgp_path.prepend(ASN);
+        bgp_path.prepend(ASN);
+        bgp_path.prepend(ASN);
+        bgp_large_community.delete([(ASN, 711, *)]);
+        bgp_large_community.delete([(ASN, 712, *)]);
+        bgp_large_community.delete([(ASN, 713, *)]);
+    }
+}
+function process_prepend_as(int peer_asn) {
+    if ((ASN, 721, peer_asn) ~ bgp_large_community) then {
+        bgp_path.prepend(ASN);
+        bgp_large_community.delete([(ASN, 721, peer_asn)]);
+        bgp_large_community.delete([(ASN, 722, peer_asn)]);
+        bgp_large_community.delete([(ASN, 723, peer_asn)]);
+    }
+    if ((ASN, 722, peer_asn) ~ bgp_large_community) then {
+        bgp_path.prepend(ASN);
+        bgp_path.prepend(ASN);
+        bgp_large_community.delete([(ASN, 721, peer_asn)]);
+        bgp_large_community.delete([(ASN, 722, peer_asn)]);
+        bgp_large_community.delete([(ASN, 723, peer_asn)]);
+    }
+    if ((ASN, 723, peer_asn) ~ bgp_large_community) then {
+        bgp_path.prepend(ASN);
+        bgp_path.prepend(ASN);
+        bgp_path.prepend(ASN);
+        bgp_large_community.delete([(ASN, 721, peer_asn)]);
+        bgp_large_community.delete([(ASN, 722, peer_asn)]);
+        bgp_large_community.delete([(ASN, 723, peer_asn)]);
+    }
+}
+function process_prepend_ix(int ix_id) {
+    if ((ASN, 731, ix_id) ~ bgp_large_community) then {
+        bgp_path.prepend(ASN);
+        bgp_large_community.delete([(ASN, 731, ix_id)]);
+        bgp_large_community.delete([(ASN, 732, ix_id)]);
+        bgp_large_community.delete([(ASN, 733, ix_id)]);
+    }
+    if ((ASN, 732, ix_id) ~ bgp_large_community) then {
+        bgp_path.prepend(ASN);
+        bgp_path.prepend(ASN);
+        bgp_large_community.delete([(ASN, 731, ix_id)]);
+        bgp_large_community.delete([(ASN, 732, ix_id)]);
+        bgp_large_community.delete([(ASN, 733, ix_id)]);
+    }
+    if ((ASN, 733, ix_id) ~ bgp_large_community) then {
+        bgp_path.prepend(ASN);
+        bgp_path.prepend(ASN);
+        bgp_path.prepend(ASN);
+        bgp_large_community.delete([(ASN, 731, ix_id)]);
+        bgp_large_community.delete([(ASN, 732, ix_id)]);
+        bgp_large_community.delete([(ASN, 733, ix_id)]);
+    }
+}
+
+# --- Informational: RPKI marking ---
+function add_rpki_community() {
+    {{ if .RPKIEnable -}}
+    if (net.type = NET_IP4) then {
+        if (roa_check(rpki4, net, bgp_path.last_nonaggregated) = ROA_VALID) then bgp_large_community.add((ASN, 511, 100));
+        if (roa_check(rpki4, net, bgp_path.last_nonaggregated) = ROA_UNKNOWN) then bgp_large_community.add((ASN, 511, 101));
+        if (roa_check(rpki4, net, bgp_path.last_nonaggregated) = ROA_INVALID) then bgp_large_community.add((ASN, 511, 102));
+    }
+    if (net.type = NET_IP6) then {
+        if (roa_check(rpki6, net, bgp_path.last_nonaggregated) = ROA_VALID) then bgp_large_community.add((ASN, 511, 100));
+        if (roa_check(rpki6, net, bgp_path.last_nonaggregated) = ROA_UNKNOWN) then bgp_large_community.add((ASN, 511, 101));
+        if (roa_check(rpki6, net, bgp_path.last_nonaggregated) = ROA_INVALID) then bgp_large_community.add((ASN, 511, 102));
+    }
+    {{- end }}
+}
+function remove_information_communitys() {
+    bgp_large_community.delete([(ASN, 411, *)]);
+    bgp_large_community.delete([(ASN, 511, *)]);
+}
+function add_on_import() {
+    bgp_large_community.add((ASN, 411, pop_id));
+}
+function add_on_export() {
+    bgp_community.add((ASN, 99));
+    bgp_large_community.add((ASN, 411, 99));
+    bgp_large_community.add((ASN, pop_id, 99));
+}
+function add_ix_community(int ix_id) {
+    bgp_large_community.add((ASN, 412, ix_id));
+}
+function add_upstream_community(int upstream_id) {
+    bgp_large_community.add((ASN, 414, upstream_id));
+    bgp_large_community.add((ASN, 411, 90));
+    bgp_community.add((ASN, 90));
+}
+
+# --- Composed import/export pipelines ---
+function import_communitys(int peer_asn; int pop_id; int import_src_id) {
+    remove_information_communitys();
+    add_on_import();
+    bgp_large_community.add((ASN, 411, peer_asn));
+    bgp_large_community.add((ASN, pop_id, peer_asn));
+    bgp_large_community.add((ASN, pop_id, import_src_id));
+    add_rpki_community();
+}
+function downstream_communitys(int peer_asn; int pop_id) {
+    remove_information_communitys();
+    add_on_import();
+    bgp_community.add((ASN, 99));
+    bgp_community.add((ASN, pop_id));
+    bgp_large_community.add((ASN, 411, 99));
+    bgp_large_community.add((ASN, 99, pop_id));
+    add_rpki_community();
+}
+function export_communitys(int peer_asn) {
+    reject_general(peer_asn);
+    process_prepend_general();
+    process_prepend_as(peer_asn);
+    add_on_export();
+}
+function export_ix_communitys(int ix_id) {
+    reject_ix(ix_id);
+    process_prepend_ix(ix_id);
+}
+{{ end }}
+
 # ---- BFD ----
 {{ range $i, $instance := .BFDInstances }}
 protocol bfd {{ StrDeref $instance.ProtocolName }} {

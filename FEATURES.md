@@ -95,6 +95,13 @@ instances, kernel statics, optimizer settings, plugin config map.
 - Global blocklist from inline lists, files, and remote URLs.
 - Per-peer max prefix limits at three stages (receive/import/export) with configurable
   trip action; max-prefix-length sanity filter; enforce first-AS and peer next-hop.
+- **`action-communities` + `pop-id`**: renders an ISP-style community library into the
+  global config, keyed on the config's own ASN — action communities (`ASN:911:asn`
+  no-export-to-AS, `739:ix` no-announce-at-IX, `711-713`/`72x`/`73x` prepend
+  general/per-AS/per-IX) and informational marking (`411` source, `412` IX,
+  `414` upstream, `511` RPKI state), plus composed `import_communitys`/
+  `export_communitys` pipelines callable from `pre-export`/`post-import-filter`
+  hooks. `pop-id` emits `define pop_id = N;` for per-site tagging.
 
 ## Route Optimizer (`pkg/optimizer`)
 

@@ -18,6 +18,10 @@ integration contract, [FEATURES.md](FEATURES.md) for the full feature list, and 
   rendered into export filters, targetable by template
 * **State reporting** — pushes session state + received/filtered prefixes + AS paths to a URL
   (e.g. XodoPanel `/api/v1/bgp/report`) on an interval, or pull via `GET /v1/sessions`
+* **Action community library** — `action-communities: true` renders an ISP-style community
+  framework keyed on your ASN: do-not-announce (`911:asn`/`739:ix`), prepending
+  (`711-713`/`72x:asn`/`73x:ix`), and informational marking (`411`/`412`/`414`/`511`) —
+  callable from `pre-export`/`post-import-filter` hooks; `pop-id` tags per-site
 * Robust BGP route filtering with RPKI, IRR, and downstream AS cone, ASPA, never-via-RS and more
 * Automatic configuration from PeeringDB
 * Automatic route optimization by enriching the standard set of BGP attributes with latency and packet loss metrics
