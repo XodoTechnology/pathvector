@@ -54,7 +54,27 @@ type Report struct {
 var (
 	routePrefixRegex = regexp.MustCompile(`^([0-9a-fA-F:.]+/\d+)\s`)
 	routeASPathRegex = regexp.MustCompile(`\[AS([0-9 ]+)[a-z?]*\]`)
+	protoAFRegex     = regexp.MustCompile(`_v([46])(_\d+)?$`)
 )
+
+// protoAF returns "4" or "6" for a protocol. BIRD 3 shows "---" in the table
+// column for BGP protos, so the pathvector _v4/_v6 name suffix is primary;
+// table and neighbor address are fallbacks.
+func protoAF(ps *bird.ProtocolState) string {
+	if m := protoAFRegex.FindStringSubmatch(ps.Name); m != nil {
+		return m[1]
+	}
+	switch ps.Table {
+	case "master4":
+		return "4"
+	case "master6":
+		return "6"
+	}
+	if ps.BGP != nil && strings.Contains(ps.BGP.NeighborAddress, ":") {
+		return "6"
+	}
+	return ""
+}
 
 // sinceFormats are the timestamp formats BIRD prints in `show protocols`
 var sinceFormats = []string{
@@ -160,19 +180,24 @@ func Collect(c *config.Config, router string, prefixCap int) (*Report, error) {
 
 	// Aggregate per-peer across v4/v6 protocols
 	for _, ps := range protocolStates {
-		if ps.BGP == nil {
+		if ps.Proto != "BGP" {
 			continue
 		}
 		s := getSession(ps.Name)
-		state := ps.BGP.State
+		state := ""
+		if ps.BGP != nil {
+			state = ps.BGP.State
+		}
 		if state == "" {
 			state = ps.Info
+		}
+		if state == "" {
+			state = ps.State // down/start — protos without a BGP detail section
 		}
 		if state != "" && (s.State == "" || state == "Established") {
 			s.State = state
 		}
-		// per-family state — table is master4/master6 in BIRD's view
-		if af := strings.TrimPrefix(ps.Table, "master"); af == "4" || af == "6" {
+		if af := protoAF(ps); af != "" {
 			fam := s.Families[af]
 			if fam == nil {
 				fam = &FamilyReport{}
@@ -252,9 +277,20 @@ func Collect(c *config.Config, router string, prefixCap int) (*Report, error) {
 		if _, ok := sessions[peerName]; ok {
 			continue
 		}
-		s := &SessionReport{Name: peerName, State: "down", Accepted: -1, FilteredCount: -1, Sent: -1}
+		s := &SessionReport{Name: peerName, State: "down", Accepted: -1, FilteredCount: -1, Sent: -1, Families: map[string]*FamilyReport{}}
 		if peerData.Disabled != nil && *peerData.Disabled {
 			s.State = "disabled"
+		}
+		// Synthesise per-family state from configured neighbor IPs so a
+		// never-generated session still reports v4/v6 independently
+		if peerData.NeighborIPs != nil {
+			for _, n := range *peerData.NeighborIPs {
+				af := "4"
+				if strings.Contains(n, ":") {
+					af = "6"
+				}
+				s.Families[af] = &FamilyReport{State: s.State}
+			}
 		}
 		sessions[peerName] = s
 		order = append(order, peerName)
