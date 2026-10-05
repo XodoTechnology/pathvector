@@ -204,7 +204,8 @@ func Collect(c *config.Config, router string, prefixCap int) (*Report, error) {
 		order = append(order, peerName)
 	}
 
-	r := &Report{Router: router}
+	// Sessions must serialize as [] not null — the panel rejects null
+	r := &Report{Router: router, Sessions: []SessionReport{}}
 	for _, name := range order {
 		r.Sessions = append(r.Sessions, *sessions[name])
 	}
