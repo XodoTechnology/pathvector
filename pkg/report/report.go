@@ -30,6 +30,18 @@ type SessionReport struct {
 	Received      []string          `json:"received,omitempty"`
 	Filtered      []string          `json:"filtered,omitempty"`
 	ASPaths       map[string]string `json:"as_paths,omitempty"`
+	// per-address-family breakdown — v4 and v6 are separate BGP protocols in
+	// BIRD, and one can be down while the other is established
+	Families map[string]*FamilyReport `json:"families,omitempty"`
+}
+
+// FamilyReport is the per-AF (4/6) view of a session
+type FamilyReport struct {
+	State    string `json:"state"`
+	Uptime   int64  `json:"uptime,omitempty"`
+	Accepted int    `json:"accepted"`
+	Filtered int    `json:"filtered_count"`
+	Sent     int    `json:"sent"`
 }
 
 // Report is the full payload posted to the panel
@@ -134,7 +146,7 @@ func Collect(c *config.Config, router string, prefixCap int) (*Report, error) {
 		if s, ok := sessions[name]; ok {
 			return s
 		}
-		s := &SessionReport{Name: name, ASPaths: map[string]string{}}
+		s := &SessionReport{Name: name, ASPaths: map[string]string{}, Families: map[string]*FamilyReport{}}
 		sessions[name] = s
 		order = append(order, name)
 		return s
@@ -152,6 +164,31 @@ func Collect(c *config.Config, router string, prefixCap int) (*Report, error) {
 		}
 		if state != "" && (s.State == "" || state == "Established") {
 			s.State = state
+		}
+		// per-family state — table is master4/master6 in BIRD's view
+		if af := strings.TrimPrefix(ps.Table, "master"); af == "4" || af == "6" {
+			fam := s.Families[af]
+			if fam == nil {
+				fam = &FamilyReport{}
+				s.Families[af] = fam
+			}
+			fam.State = state
+			if ps.Routes != nil {
+				if ps.Routes.Imported >= 0 {
+					fam.Accepted += ps.Routes.Imported
+				}
+				if ps.Routes.Filtered >= 0 {
+					fam.Filtered += ps.Routes.Filtered
+				}
+				if ps.Routes.Exported >= 0 {
+					fam.Sent += ps.Routes.Exported
+				}
+			}
+			if t, ok := parseSince(ps.Since); ok && state == "Established" {
+				if u := int64(time.Since(t).Seconds()); u > fam.Uptime {
+					fam.Uptime = u
+				}
+			}
 		}
 		if t, ok := parseSince(ps.Since); ok && s.State == "Established" {
 			uptime := int64(time.Since(t).Seconds())
