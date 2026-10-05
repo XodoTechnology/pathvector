@@ -133,8 +133,20 @@ func RunCommand(command string, socket string, timeout time.Duration) (string, s
 	}
 	log.Debugf("BIRD init response: %s", resp)
 
-	// Check BIRD version
-	birdVersion := strings.Split(resp, " ")[1]
+	// Check BIRD version — the banner is a "0001 BIRD <ver> ready." line;
+	// an empty/short read (socket EOFs while BIRD reconfigures) used to
+	// panic here on [1]
+	birdParts := strings.Fields(resp)
+	birdVersion := ""
+	for i, p := range birdParts {
+		if p == "BIRD" && i+1 < len(birdParts) {
+			birdVersion = strings.TrimSuffix(birdParts[i+1], ".")
+			break
+		}
+	}
+	if birdVersion == "" {
+		return "", "", fmt.Errorf("unparseable BIRD banner %q — daemon may be mid-reload", resp)
+	}
 	if semver.Compare(birdVersion, supportedMin) == -1 {
 		log.Warnf("BIRD version %s older than minimum supported version %s", birdVersion, supportedMin)
 	}

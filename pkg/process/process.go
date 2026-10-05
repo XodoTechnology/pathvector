@@ -378,8 +378,10 @@ func load(configBlob []byte, baseDir string) (*config.Config, error) {
 		}
 	}
 
-	// Set PeeringDB URL
-	peeringdb.Endpoint = c.PeeringDBURL
+	// Set PeeringDB URL — normalize to a trailing slash: endpoints are
+	// joined as Endpoint+"/net?…", so "…/api" (no slash) produces "apinet"
+	// and every query 404s
+	peeringdb.Endpoint = strings.TrimRight(c.PeeringDBURL, "/") + "/"
 	log.Debugf("Setting PeeringDB endpoint to %s", peeringdb.Endpoint)
 
 	// Set hostname if empty
@@ -422,8 +424,10 @@ func load(configBlob []byte, baseDir string) (*config.Config, error) {
 		// Set sanitized peer name
 		peerData.ProtocolName = util.Sanitize(peerName)
 
-		// If any peer has NVRS filtering enabled, mark it for querying.
-		if peerData.FilterNeverViaRouteServers != nil {
+		// If any peer has NVRS filtering enabled, mark it for querying —
+		// enabled, not just set: an explicit false (panel per-session opt-out)
+		// must not trigger the PeeringDB query
+		if peerData.FilterNeverViaRouteServers != nil && *peerData.FilterNeverViaRouteServers {
 			c.QueryNVRS = true
 		}
 
