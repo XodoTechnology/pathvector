@@ -29,6 +29,7 @@ type SessionReport struct {
 	Sent          int               `json:"sent"`
 	Received      []string          `json:"received,omitempty"`
 	Filtered      []string          `json:"filtered,omitempty"`
+	Exporting     []string          `json:"exporting,omitempty"`
 	ASPaths       map[string]string `json:"as_paths,omitempty"`
 	// per-address-family breakdown — v4 and v6 are separate BGP protocols in
 	// BIRD, and one can be down while the other is established
@@ -87,11 +88,16 @@ func protocolNames(c *config.Config) map[string]*templating.Protocol {
 }
 
 // sessionRoutes lists prefixes for a BIRD protocol. filtered selects between
-// `show route protocol` and `show route filtered protocol`.
-func sessionRoutes(socket, protoName string, filtered bool, timeout time.Duration) ([]string, map[string]string, error) {
+// `show route protocol` and `show route filtered protocol`; mode "export"
+// uses `show route export` to list what we'd announce to the peer — the AS
+// paths then reflect prepends applied by export rules.
+func sessionRoutes(socket, protoName, mode string, timeout time.Duration) ([]string, map[string]string, error) {
 	command := fmt.Sprintf("show route protocol %s", protoName)
-	if filtered {
+	switch mode {
+	case "filtered":
 		command = fmt.Sprintf("show route filtered protocol %s", protoName)
+	case "export":
+		command = fmt.Sprintf("show route export %s", protoName)
 	}
 	resp, _, err := bird.RunCommand(command, socket, timeout)
 	if err != nil {
@@ -211,7 +217,7 @@ func Collect(c *config.Config, router string, prefixCap int) (*Report, error) {
 		// Enumerate prefixes when the session is small enough
 		if ps.Routes != nil && ps.Routes.Imported >= 0 && ps.Routes.Imported <= prefixCap {
 			cmdTimeout := time.Duration(c.BIRDTimeout) * time.Second
-			if recv, paths, err := sessionRoutes(c.BIRDSocket, ps.Name, false, cmdTimeout); err == nil {
+			if recv, paths, err := sessionRoutes(c.BIRDSocket, ps.Name, "received", cmdTimeout); err == nil {
 				s.Received = append(s.Received, recv...)
 				for pfx, p := range paths {
 					s.ASPaths[pfx] = p
@@ -219,11 +225,24 @@ func Collect(c *config.Config, router string, prefixCap int) (*Report, error) {
 			} else {
 				log.Debugf("report: session routes %s: %s", ps.Name, err)
 			}
-			if filt, paths, err := sessionRoutes(c.BIRDSocket, ps.Name, true, cmdTimeout); err == nil {
+			if filt, paths, err := sessionRoutes(c.BIRDSocket, ps.Name, "filtered", cmdTimeout); err == nil {
 				s.Filtered = append(s.Filtered, filt...)
 				for pfx, p := range paths {
 					s.ASPaths[pfx] = p
 				}
+			}
+		}
+		// Export side — same cap applies; a downstream receiving a full table
+		// stays count-only rather than enumerating ~1M routes every cycle.
+		if ps.Routes != nil && ps.Routes.Exported >= 0 && ps.Routes.Exported <= prefixCap {
+			cmdTimeout := time.Duration(c.BIRDTimeout) * time.Second
+			if exp, paths, err := sessionRoutes(c.BIRDSocket, ps.Name, "export", cmdTimeout); err == nil {
+				s.Exporting = append(s.Exporting, exp...)
+				for pfx, p := range paths {
+					s.ASPaths[pfx] = p
+				}
+			} else {
+				log.Debugf("report: export routes %s: %s", ps.Name, err)
 			}
 		}
 	}
