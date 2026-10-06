@@ -777,6 +777,9 @@ var globalsAllowlist = map[string]bool{
 	"prefixes":           true,
 	"origin-communities": true,
 	"local-communities":  true,
+	"action-communities": true,
+	"pop-id":             true,
+	"templates":          true,
 }
 
 // fragmentEquals reports whether the existing fragment file already encodes
