@@ -39,6 +39,17 @@ func ProtocolNames() map[string]*Protocol {
 	return protocolNameMap
 }
 
+// Reset clears per-render protocol name state. The API server renders many
+// times in one process — without this, UniqueProtocolName keeps seeing names
+// from previous renders and bumps the anti-collision suffix on every run,
+// renaming (and flapping) every BGP session.
+func Reset() {
+	protocolNameMapLock.Lock()
+	defer protocolNameMapLock.Unlock()
+	protocolNames = nil
+	protocolNameMap = map[string]*Protocol{}
+}
+
 // Template functions
 var funcMap = template.FuncMap{
 	"Contains": strings.Contains,

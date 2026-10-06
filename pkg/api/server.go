@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -845,7 +846,10 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 
 	// Merge whitelisted global keys into the base config before validating —
 	// the panel pushes originated prefixes + origin-community tags here so
-	// export scoping stays in sync with IPAM without a manual edit.
+	// export scoping stays in sync with IPAM without a manual edit. The file
+	// is only rewritten when the merge actually changes something — a no-op
+	// reconcile must not churn the config or force a BIRD reconfigure.
+	globalsChanged := false
 	if len(in.Globals) > 0 {
 		doc := map[string]any{}
 		if err := yaml.Unmarshal(baseSnapshot, &doc); err != nil {
@@ -858,13 +862,18 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		orig := map[string]any{}
+		_ = yaml.Unmarshal(baseSnapshot, &orig)
 		for k, v := range in.Globals {
 			doc[k] = v
 		}
 		if b, err := yaml.Marshal(doc); err == nil {
-			if err := os.WriteFile(s.ConfigFile, b, 0644); err != nil {
-				writeErr(w, http.StatusInternalServerError, err)
-				return
+			if oldB, oerr := yaml.Marshal(orig); oerr != nil || !bytes.Equal(oldB, b) {
+				if err := os.WriteFile(s.ConfigFile, b, 0644); err != nil {
+					writeErr(w, http.StatusInternalServerError, err)
+					return
+				}
+				globalsChanged = true
 			}
 		}
 	}
@@ -911,25 +920,60 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	rulesChanged := false
 	if in.Rules != nil {
+		rp := s.rulesPath(dir)
 		if len(*in.Rules) == 0 {
-			_ = os.Remove(s.rulesPath(dir))
-		} else if err := s.writeRulesFragment(dir, *in.Rules); err != nil {
+			if _, err := os.Stat(rp); err == nil {
+				if err := os.Remove(rp); err != nil {
+					restore()
+					writeErr(w, http.StatusInternalServerError, err)
+					return
+				}
+				rulesChanged = true
+			}
+		} else {
+			same := false
+			if b, err := os.ReadFile(rp); err == nil {
+				var cur struct {
+					Rules []map[string]any `yaml:"prefix-rules"`
+				}
+				if yaml.Unmarshal(b, &cur) == nil {
+					a, e1 := yaml.Marshal(cur.Rules)
+					bb, e2 := yaml.Marshal(*in.Rules)
+					same = e1 == nil && e2 == nil && bytes.Equal(a, bb)
+				}
+			}
+			if !same {
+				if err := s.writeRulesFragment(dir, *in.Rules); err != nil {
+					restore()
+					writeErr(w, http.StatusInternalServerError, err)
+					return
+				}
+				rulesChanged = true
+			}
+		}
+	}
+
+	// Skip the render+validate+birdc-configure cycle entirely when the
+	// desired state already matches what's on disk — an unconditional apply
+	// on a polling reconcile flaps every session on each timer tick. Still
+	// retry the apply if the last one errored so a failed push self-heals.
+	changed := globalsChanged || rulesChanged ||
+		len(created) > 0 || len(updated) > 0 || len(deleted) > 0
+	applied := false
+	if changed || s.lastApplyErr != "" {
+		if _, err := s.load(); err != nil {
+			restore()
+			writeErr(w, http.StatusUnprocessableEntity, err)
+			return
+		}
+		if err := s.apply(reqOpts(r)); err != nil {
 			restore()
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}
-	}
-
-	if _, err := s.load(); err != nil {
-		restore()
-		writeErr(w, http.StatusUnprocessableEntity, err)
-		return
-	}
-	if err := s.apply(reqOpts(r)); err != nil {
-		restore()
-		writeErr(w, http.StatusInternalServerError, err)
-		return
+		applied = true
 	}
 
 	sort.Strings(created)
@@ -938,6 +982,7 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 	sort.Strings(unchanged)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":        true,
+		"applied":   applied,
 		"created":   created,
 		"updated":   updated,
 		"deleted":   deleted,

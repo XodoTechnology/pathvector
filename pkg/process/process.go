@@ -948,6 +948,11 @@ func Run(configFilename, lockFile, version string, opts RunOptions) error {
 	}
 	log.Debug("Finished loading templates")
 
+	// Clear per-render protocol name state — long-running processes (API
+	// server) would otherwise collide with names from previous renders and
+	// suffix-shift every protocol, tearing sessions down on each apply
+	templating.Reset()
+
 	// Create cache directory
 	log.Debugf("Making cache directory %s", c.CacheDirectory)
 	if err := os.MkdirAll(c.CacheDirectory, os.FileMode(0755)); err != nil {
