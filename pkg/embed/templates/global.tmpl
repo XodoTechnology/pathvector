@@ -439,6 +439,15 @@ function add_rpki_community() {
 function remove_information_communitys() {
     bgp_large_community.delete([(ASN, {{ $ids.InfoSource }}, *)]);
     bgp_large_community.delete([(ASN, {{ $ids.InfoRPKI }}, *)]);
+    bgp_large_community.delete([(ASN, {{ $ids.InfoIX }}, *)]);
+    bgp_large_community.delete([(ASN, {{ $ids.InfoUpstream }}, *)]);
+    {{ if .PopID -}}
+    # this-PoP source/origin tags — a peer must not be able to tag a route
+    # into our announce lists (e.g. (ASN,pop,50) posing as a downstream
+    # route, or (ASN,pop,100) posing as originated). Other PoPs' tags are
+    # harmless: they never match this router's announce lists.
+    bgp_large_community.delete([(ASN, pop_id, *)]);
+    {{- end }}
 }
 function add_on_import() {
     bgp_large_community.add((ASN, {{ $ids.InfoSource }}, pop_id));
