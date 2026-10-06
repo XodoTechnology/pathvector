@@ -40,9 +40,8 @@ func ProtocolNames() map[string]*Protocol {
 }
 
 // Reset clears per-render protocol name state. The API server renders many
-// times in one process — without this, UniqueProtocolName keeps seeing names
-// from previous renders and bumps the anti-collision suffix on every run,
-// renaming (and flapping) every BGP session.
+// times in one process — without this, UniqueProtocolName would see names
+// from previous renders as duplicates and fail every subsequent generate.
 func Reset() {
 	protocolNameMapLock.Lock()
 	defer protocolNameMapLock.Unlock()
@@ -210,28 +209,26 @@ var funcMap = template.FuncMap{
 		return ""
 	},
 
-	// UniqueProtocolName takes a protocol-safe string and address family and returns a unique protocol name
-	"UniqueProtocolName": func(s, userSuppliedName *string, af string, asn *int, tags *[]string) string {
+	// UniqueProtocolName takes a protocol-safe string and address family and returns a protocol name.
+	// Duplicate name+ASN+AF combinations are a config error — fail the render rather than
+	// silently renaming the protocol (a renamed protocol tears the session down on reconfigure).
+	"UniqueProtocolName": func(s, userSuppliedName *string, af string, asn *int, tags *[]string) (string, error) {
 		protoName := fmt.Sprintf("%s_AS%d_v%s", *s, *asn, af)
-		i := 1
-		for {
-			if !util.Contains(protocolNames, protoName) {
-				protocolNames = append(protocolNames, protoName)
-				var t []string
-				if tags != nil {
-					t = *tags
-				}
-				protocolNameMapLock.Lock()
-				protocolNameMap[protoName] = &Protocol{
-					Name: *userSuppliedName,
-					Tags: t,
-				}
-				protocolNameMapLock.Unlock()
-				return protoName
-			}
-			protoName = fmt.Sprintf("%s_AS%d_v%s_%d", *s, *asn, af, i)
-			i++
+		if util.Contains(protocolNames, protoName) {
+			return "", fmt.Errorf("duplicate protocol name %s — peer names must be unique per ASN+address family", protoName)
 		}
+		protocolNames = append(protocolNames, protoName)
+		var t []string
+		if tags != nil {
+			t = *tags
+		}
+		protocolNameMapLock.Lock()
+		protocolNameMap[protoName] = &Protocol{
+			Name: *userSuppliedName,
+			Tags: t,
+		}
+		protocolNameMapLock.Unlock()
+		return protoName, nil
 	},
 
 	"SplitFirst": func(s string, delim string) string {
