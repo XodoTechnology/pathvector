@@ -767,7 +767,16 @@ func (s *Server) deleteRules(w http.ResponseWriter, r *http.Request) {
 type reconcileRequest struct {
 	Sessions map[string]map[string]any `json:"sessions"`        // desired API-managed sessions
 	Rules    *[]map[string]any         `json:"rules"`           // if non-null, replaces the prefix-rules set
+	Globals  map[string]any            `json:"globals"`         // merged into the base config (whitelisted keys only)
 	Prune    bool                      `json:"prune,omitempty"` // delete API-managed sessions not in sessions
+}
+
+// globalsAllowlist gates which base-config keys reconcile may set —
+// everything else (asn, api-*, templates, credentials) stays operator-managed.
+var globalsAllowlist = map[string]bool{
+	"prefixes":           true,
+	"origin-communities": true,
+	"local-communities":  true,
 }
 
 // fragmentEquals reports whether the existing fragment file already encodes
@@ -802,7 +811,7 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Snapshot the sessions directory for rollback
+	// Snapshot the sessions directory AND the base config for rollback
 	dir := s.sessionsDir()
 	snapshot := map[string][]byte{}
 	frags, _ := filepath.Glob(filepath.Join(dir, "*.yml"))
@@ -811,6 +820,7 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 			snapshot[f] = b
 		}
 	}
+	baseSnapshot, _ := os.ReadFile(s.ConfigFile)
 	restore := func() {
 		for f, b := range snapshot {
 			if err := os.WriteFile(f, b, 0644); err != nil {
@@ -821,6 +831,37 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 		for _, f := range current {
 			if _, ok := snapshot[f]; !ok {
 				_ = os.Remove(f)
+			}
+		}
+		if baseSnapshot != nil {
+			if err := os.WriteFile(s.ConfigFile, baseSnapshot, 0644); err != nil {
+				log.Errorf("api: restoring base config: %s", err)
+			}
+		}
+	}
+
+	// Merge whitelisted global keys into the base config before validating —
+	// the panel pushes originated prefixes + origin-community tags here so
+	// export scoping stays in sync with IPAM without a manual edit.
+	if len(in.Globals) > 0 {
+		doc := map[string]any{}
+		if err := yaml.Unmarshal(baseSnapshot, &doc); err != nil {
+			writeErr(w, http.StatusUnprocessableEntity, fmt.Errorf("base config does not parse: %v", err))
+			return
+		}
+		for k := range in.Globals {
+			if !globalsAllowlist[k] {
+				writeErr(w, http.StatusForbidden, fmt.Errorf("globals key %q is not allowlisted", k))
+				return
+			}
+		}
+		for k, v := range in.Globals {
+			doc[k] = v
+		}
+		if b, err := yaml.Marshal(doc); err == nil {
+			if err := os.WriteFile(s.ConfigFile, b, 0644); err != nil {
+				writeErr(w, http.StatusInternalServerError, err)
+				return
 			}
 		}
 	}
