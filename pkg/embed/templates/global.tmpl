@@ -60,6 +60,12 @@ protocol static default6 {
 }
 {{- end }}
 
+{{ if .L3VPN }}
+# ---- L3VPN ----
+vpn4 table vpntab4;
+vpn6 table vpntab6;
+{{ end }}
+
 # ---- Parameters ----
 
 timeformat base iso long;

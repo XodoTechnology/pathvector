@@ -210,6 +210,11 @@ module pathvector {
       default "true";
       description "Should private ASNs be removed from path before exporting?";
     }
+    leaf l3vpn {
+      type boolean;
+      default "false";
+      description "Should VPNv4 and VPNv6 (MPLS L3VPN, RFC 4364) routes be exchanged with this peer? Routes are kept in the vpntab4 and vpntab6 tables, e.g. for a route reflector";
+    }
     leaf mp-unicast-46 {
       type boolean;
       default "false";

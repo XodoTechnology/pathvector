@@ -967,6 +967,14 @@ Should private ASNs be removed from path before exporting?
 |------|---------|------------|
 | bool   | true      |          |
 
+### `l3vpn`
+
+Should VPNv4 and VPNv6 (MPLS L3VPN, RFC 4364) routes be exchanged with this peer? Routes are kept in the vpntab4 and vpntab6 tables, e.g. for a route reflector
+
+| Type | Default | Validation |
+|------|---------|------------|
+| bool   | false      |          |
+
 ### `mp-unicast-46`
 
 Should this peer be configured with multiprotocol IPv4 and IPv6 unicast?

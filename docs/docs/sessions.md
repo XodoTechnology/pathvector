@@ -86,3 +86,33 @@ peers:
 ```
 
 The kernel source address must be configured on an interface of the router, otherwise the kernel rejects the routes.
+
+## L3VPN (VPNv4/VPNv6)
+
+Set `l3vpn: true` on a peer to exchange MPLS L3VPN routes (RFC 4364 VPNv4 and VPNv6) with it, in addition to unicast
+routes. This lets Pathvector act as a BGP route reflector for an MPLS L3VPN network whose PE routers do the label
+switching, for example cheap MPLS-capable switches with small FIBs.
+
+VPN routes are stored in the BIRD tables `vpntab4` and `vpntab6` (created when at least one peer has `l3vpn` enabled)
+and are reflected unchanged between peers: Pathvector doesn't filter VPN routes, install them in the kernel or
+allocate MPLS labels. `import: false`, `export: false`, the global `no-accept`/`no-announce`, `next-hop-self` and the
+`add-path-*` options also apply to the VPN channels.
+
+```yaml
+asn: 65530
+peers:
+  PE1:
+    asn: 65530
+    rr-client: true
+    l3vpn: true
+    neighbors:
+      - 192.0.2.11
+  PE2:
+    asn: 65530
+    rr-client: true
+    l3vpn: true
+    neighbors:
+      - 192.0.2.12
+```
+
+Inspect VPN routes with `birdc show route table vpntab4`.

@@ -403,3 +403,36 @@ kernel:
 	_, err := Load([]byte(strings.ReplaceAll(base, "[100, 200]", "[10]")))
 	assert.ErrorContains(t, err, "invalid kernel table 10")
 }
+
+func TestRenderL3VPN(t *testing.T) {
+	base := `
+asn: 65530
+router-id: 192.0.2.1
+hostname: rr1
+rpki-enable: false
+peers:
+  PE1:
+    asn: 65530
+    rr-client: true
+    l3vpn: true
+    neighbors: [192.0.2.11]
+  PE2:
+    asn: 65530
+    rr-client: true
+    l3vpn: true
+    import: false
+    neighbors: [192.0.2.12]
+`
+	out := renderConfig(t, base)
+	assert.Contains(t, out[""], "vpn4 table vpntab4;")
+	assert.Contains(t, out[""], "vpn6 table vpntab6;")
+	assert.Contains(t, out["PE1"], "vpn4 mpls {")
+	assert.Contains(t, out["PE1"], "vpn6 mpls {")
+	assert.Contains(t, out["PE1"], "import all;")
+	assert.Contains(t, out["PE2"], "import none;", "import: false applies to VPN routes")
+
+	// VPN tables are only defined when a peer uses l3vpn
+	out = renderConfig(t, strings.ReplaceAll(base, "    l3vpn: true\n", ""))
+	assert.NotContains(t, out[""], "vpntab4")
+	assert.NotContains(t, out["PE1"], "mpls")
+}

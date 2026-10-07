@@ -292,5 +292,25 @@ protocol bgp {{ UniqueProtocolName $peer.ProtocolName $peerName $af $peer.ASN $p
         };
     };
     {{ end }}
+    {{ if BoolDeref $peer.L3VPN }}
+    {{ $vpnImport := "all" }}{{ if or $global.NoAccept (not (BoolDeref $peer.Import)) }}{{ $vpnImport = "none" }}{{ end }}
+    {{ $vpnExport := "all" }}{{ if or $global.NoAnnounce (not (BoolDeref $peer.Export)) }}{{ $vpnExport = "none" }}{{ end }}
+    vpn4 mpls {
+        table vpntab4;
+        import {{ $vpnImport }};
+        export {{ $vpnExport }};
+        {{ if BoolDeref $peer.NextHopSelf }}next hop self;{{ end }}
+        {{ if BoolDeref $peer.AddPathTx }}add paths tx;{{ end }}
+        {{ if BoolDeref $peer.AddPathRx }}add paths rx;{{ end }}
+    };
+    vpn6 mpls {
+        table vpntab6;
+        import {{ $vpnImport }};
+        export {{ $vpnExport }};
+        {{ if BoolDeref $peer.NextHopSelf }}next hop self;{{ end }}
+        {{ if BoolDeref $peer.AddPathTx }}add paths tx;{{ end }}
+        {{ if BoolDeref $peer.AddPathRx }}add paths rx;{{ end }}
+    };
+    {{ end }}
 }
 {{ end }}

@@ -581,6 +581,11 @@ func Load(configBlob []byte) (*config.Config, error) {
 			return nil, fmt.Errorf("[%s] auto-as-set-members requires as-set or auto-as-set", peerName)
 		}
 
+		// VPN tables are only defined if at least one peer exchanges L3VPN routes
+		if *peerData.L3VPN {
+			c.L3VPN = true
+		}
+
 		// Validate per-peer kernel source addresses
 		if peerData.Source4 != nil {
 			if ip := net.ParseIP(*peerData.Source4); ip == nil || ip.To4() == nil {

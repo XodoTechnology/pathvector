@@ -129,6 +129,7 @@ type Peer struct {
 	RSClient               *bool     `yaml:"rs-client" description:"Should this peer be a route server client?" default:"false"`
 	RRClient               *bool     `yaml:"rr-client" description:"Should this peer be a route reflector client?" default:"false"`
 	RemovePrivateASNs      *bool     `yaml:"remove-private-asns" description:"Should private ASNs be removed from path before exporting?" default:"true"`
+	L3VPN                  *bool     `yaml:"l3vpn" description:"Should VPNv4 and VPNv6 (MPLS L3VPN, RFC 4364) routes be exchanged with this peer? Routes are kept in the vpntab4 and vpntab6 tables, e.g. for a route reflector" default:"false"`
 	MPUnicast46            *bool     `yaml:"mp-unicast-46" description:"Should this peer be configured with multiprotocol IPv4 and IPv6 unicast?" default:"false"`
 	AllowLocalAS           *bool     `yaml:"allow-local-as" description:"Should routes originated by the local ASN be accepted?" default:"false"`
 	AddPathTx              *bool     `yaml:"add-path-tx" description:"Enable BGP additional paths on export?" default:"false"`
@@ -414,6 +415,7 @@ type Config struct {
 	RTRServerHost             string   `yaml:"-" description:"-"`
 	RTRServerPort             int      `yaml:"-" description:"-"`
 	Prefixes4                 []string `yaml:"-" description:"-"`
+	L3VPN                     bool     `yaml:"-" description:"-"`
 	Prefixes6                 []string `yaml:"-" description:"-"`
 	QueryNVRS                 bool     `yaml:"-" description:"-"`
 	NVRSASNs                  []uint32 `yaml:"-" description:"-"`
