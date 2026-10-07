@@ -169,6 +169,16 @@ func TestRunCommandVersion(t *testing.T) {
 	}
 }
 
+func TestReadMultiLine(t *testing.T) {
+	resp, err := Read(strings.NewReader("0012-s4: restarted\n s6: restarted\n0000 \n"))
+	assert.Nil(t, err)
+	assert.Equal(t, "s4: restarted\ns6: restarted\n", resp)
+
+	resp, err = Read(strings.NewReader("8003 No protocols match\n"))
+	assert.Nil(t, err)
+	assert.Equal(t, "No protocols match\n", resp)
+}
+
 func TestRunCommandClosed(t *testing.T) {
 	client, server := net.Pipe()
 	_ = server.Close()

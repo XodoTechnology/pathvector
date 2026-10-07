@@ -57,6 +57,11 @@ func read(r io.Reader, w io.Writer) bool {
 				panic(err)
 			}
 		}
+		// "dddd-" means more lines follow, "dddd " marks the last line of a reply.
+		// Codes 0xxx/8xxx/9xxx are final unless continued, e.g. "0012-s4: restarted\n s6: restarted\n0000 \n"
+		if c[4] == byte('-') {
+			return true
+		}
 		return c[0] != byte('0') && c[0] != byte('8') && c[0] != byte('9')
 	} else {
 		if w != nil {
