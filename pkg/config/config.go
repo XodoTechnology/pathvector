@@ -210,6 +210,8 @@ type Peer struct {
 	AutoImportLimits *bool `yaml:"auto-import-limits" description:"Get import limits automatically from PeeringDB?" default:"false"`
 	AutoASSet        *bool `yaml:"auto-as-set" description:"Get as-set automatically from PeeringDB? If no as-set exists in PeeringDB, a warning will be shown and the peer ASN used instead." default:"false"`
 	AutoASSetMembers *bool `yaml:"auto-as-set-members" description:"Get AS set members automatically from the peer's IRR as-set? (independent from auto-as-set)" default:"false"`
+	// Added for natesales/pathvector#165
+	VerifyIRRPolicy *bool `yaml:"verify-irr-policy" description:"Check the peer's aut-num object in the IRR (irr-server whois) for import (from us ... accept) and export (to us ... announce) policy, with us listed directly or through an as-set, and disable the peer if it's missing. Checked for each address family the peer has neighbors in; as there's one disabled flag per peer, the whole peer is disabled if any of them lacks policy. If the IRR can't be queried, a warning is shown and the peer is left as configured." default:"false"`
 
 	HonorGracefulShutdown *bool `yaml:"honor-graceful-shutdown" description:"Should RFC8326 graceful shutdown be enabled?" default:"true"`
 

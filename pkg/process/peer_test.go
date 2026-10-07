@@ -1,6 +1,8 @@
 package process
 
 import (
+	"bufio"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -182,4 +184,91 @@ func TestPeerOffline(t *testing.T) {
 	runPeerOffline(t, c, "Bad", true)
 	assert.False(t, *c.Peers["Bad"].Import)
 	assert.NoFileExists(t, marker)
+}
+
+// fakeWhoisServer serves the given aut-num responses by query ("AS65510" etc.) and returns its address
+func fakeWhoisServer(t *testing.T, responses map[string]string) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = l.Close() })
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				return
+			}
+			line, _ := bufio.NewReader(conn).ReadString('\n')
+			_, _ = conn.Write([]byte(responses[strings.TrimSpace(line)]))
+			_ = conn.Close()
+		}
+	}()
+	return l.Addr().String()
+}
+
+func TestPeerVerifyIRRPolicy(t *testing.T) {
+	shimBGPQ4(t, `echo '{"NN": [34553, 65000]}'`)
+	whois := fakeWhoisServer(t, map[string]string{
+		// Lists us directly for both families
+		"AS65510": "aut-num: AS65510\nmp-import: afi any.unicast from AS34553 accept ANY\nmp-export: afi any.unicast to AS34553 announce AS65510\n",
+		// Lists us through an as-set, IPv6 only
+		"AS65520": "aut-num: AS65520\nmp-import: afi ipv6.unicast from AS65520:AS-UPSTREAMS accept ANY\nmp-export: afi ipv6.unicast to AS65520:AS-UPSTREAMS announce AS65520\n",
+		// Doesn't list us
+		"AS65530": "aut-num: AS65530\nimport: from AS174 accept ANY\nexport: to AS174 announce AS65530\n",
+	})
+	c := loadTestPeers(t, `
+  Direct:
+    asn: 65510
+    verify-irr-policy: true
+    neighbors: [203.0.113.10, 2001:db8::10]
+  SetV6:
+    asn: 65520
+    verify-irr-policy: true
+    neighbors: [2001:db8::20]
+  SetDual:
+    asn: 65520
+    verify-irr-policy: true
+    neighbors: [203.0.113.21, 2001:db8::21]
+  Gone:
+    asn: 65530
+    verify-irr-policy: true
+    neighbors: [203.0.113.30]
+  Unchecked:
+    asn: 65530
+    neighbors: [203.0.113.31]
+`)
+	c.IRRServer = whois
+
+	for name, disabled := range map[string]bool{
+		"Direct":    false,
+		"SetV6":     false,
+		"SetDual":   true, // no IPv4 policy, so the whole peer is disabled
+		"Gone":      true,
+		"Unchecked": false,
+	} {
+		out := runPeer(t, c, name)
+		assert.Equalf(t, disabled, *c.Peers[name].Disabled, "peer %s", name)
+		assert.Equalf(t, disabled, strings.Contains(out, "disabled;"), "peer %s", name)
+	}
+}
+
+func TestPeerVerifyIRRPolicyUnreachable(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := l.Addr().String()
+	require.NoError(t, l.Close())
+
+	c := loadTestPeers(t, `
+  Example:
+    asn: 65510
+    verify-irr-policy: true
+    neighbors: [203.0.113.10]
+`)
+	c.IRRServer = addr
+	runPeer(t, c, "Example")
+	assert.False(t, *c.Peers["Example"].Disabled, "whois failure must leave the peer unchanged")
+
+	// Offline mode skips the check
+	runPeerOffline(t, c, "Example", true)
+	assert.False(t, *c.Peers["Example"].Disabled)
 }

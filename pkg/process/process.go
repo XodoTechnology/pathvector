@@ -676,6 +676,38 @@ func rejectImports(peerName string, peerData *config.Peer, reason string) {
 	peerData.Import = util.Ptr(false)
 }
 
+// verifyIRRPolicy disables a peer whose IRR aut-num object no longer documents import from and export to our ASN
+// (natesales/pathvector#165). If the policy can't be checked, the peer is left as configured.
+func verifyIRRPolicy(peerName string, peerData *config.Peer, c *config.Config, offline bool) {
+	if offline {
+		log.Warnf("[%s] offline mode, skipping verify-irr-policy", peerName)
+		return
+	}
+
+	// Only check the address families the peer has sessions in
+	var v4, v6 bool
+	for _, n := range *peerData.NeighborIPs {
+		if strings.Contains(n, ":") {
+			v6 = true
+		} else {
+			v4 = true
+		}
+	}
+
+	//nolint:gosec // ASNs are 32-bit by definition
+	missing, err := irr.VerifyPolicy(uint32(*peerData.ASN), uint32(c.ASN), v4, v6, c.IRRServer, c.IRRQueryTimeout, c.BGPQArgs)
+	if err != nil {
+		log.Warnf("[%s] unable to verify IRR policy of AS%d, leaving peer unchanged: %v", peerName, *peerData.ASN, err)
+		return
+	}
+	if len(missing) > 0 {
+		log.Warnf("[%s] disabling peer: aut-num AS%d is missing IRR policy: %s", peerName, *peerData.ASN, strings.Join(missing, ", "))
+		peerData.Disabled = util.Ptr(true)
+	} else {
+		log.Debugf("[%s] IRR policy of AS%d verified", peerName, *peerData.ASN)
+	}
+}
+
 // peer processes a single peer. If offline is true, no live IRR or PeeringDB queries are made and only data
 // cached by previous runs is used.
 func peer(peerName string, peerData *config.Peer, c *config.Config, offline bool, wg *sync.WaitGroup) {
@@ -743,6 +775,10 @@ func peer(peerName string, peerData *config.Peer, c *config.Config, offline bool
 		rejectImports(peerName, peerData, "filter-as-set is enabled but no as-set members were found")
 		// An empty AS set member list would render an invalid BIRD set; all imports are rejected anyway
 		peerData.FilterASSet = util.Ptr(false)
+	}
+
+	if *peerData.VerifyIRRPolicy {
+		verifyIRRPolicy(peerName, peerData, c, offline)
 	}
 
 	util.PrintStructInfo(peerName, peerData)

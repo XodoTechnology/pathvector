@@ -35,6 +35,56 @@ Enable `filter-irr` to enable IRR filtering.
 Enable `filter-as-members` to reject routes that aren't originated from an ASN within the peer's `as-members` list.
 Enable `auto-as-set-members` to retrieve that list automatically from their PeeringDB IRR object.
 
+## Peer policy verification
+
+Enable `verify-irr-policy` on a peer to check that the peer's own routing policy, as published in its RPSL `aut-num` object, still documents the session with you. This is useful to automatically shut down sessions with peers that have stopped peering with you (or never documented it), for example after a peer has moved to a different upstream.
+
+Pathvector queries the peer's `aut-num` object (`AS<peer ASN>`) from the [`irr-server`](https://pathvector.io/docs/configuration/#irr-server) over WHOIS (TCP port 43, or the port given as `host:port`), using the `irr-query-timeout`. If `bgpq-args` restricts the IRR sources with `-S`, the WHOIS query is restricted to the same sources. The session is considered valid if the object contains both:
+
+- an import rule `from <X> ... accept ...` (`import:` or `mp-import:`), and
+- an export rule `to <X> ... announce ...` (`export:` or `mp-export:`),
+
+where `<X>` is your global `asn` as `AS<asn>`, `AS-ANY`, or an as-set whose members (expanded recursively with bgpq4) include your ASN. `accept NOT ANY` and `announce NOT ANY` don't count.
+
+The check is address family aware and is done for each family the peer has `neighbors` in:
+
+- IPv4 is covered by plain `import:`/`export:` rules, and by `mp-import:`/`mp-export:` rules with `afi ipv4`, `ipv4.unicast`, `any` or `any.unicast` (or no `afi` at all).
+- IPv6 is covered by `mp-import:`/`mp-export:` rules with `afi ipv6`, `ipv6.unicast`, `any` or `any.unicast` (or no `afi` at all).
+
+For example, if your ASN is 6939, both of these `aut-num` objects document an IPv6 session with you (the first one assuming `AS199514:AS-UPSTREAMS` contains AS924 and AS6939); only the second one also documents an IPv4 session:
+
+```
+aut-num:   AS207960
+mp-export: afi ipv6.unicast to AS199514:AS-UPSTREAMS announce AS-RAPDODGE
+mp-import: afi ipv6.unicast from AS199514:AS-UPSTREAMS accept ANY
+```
+
+```
+aut-num:   AS207960
+mp-export: afi any.unicast to AS6939 announce AS-ROUTE48
+mp-import: afi any.unicast from AS6939 accept ANY
+```
+
+```yaml
+asn: 6939
+peers:
+  Example:
+    asn: 207960
+    verify-irr-policy: true
+    neighbors:
+      - 2001:db8::1
+```
+
+If policy is missing, the peer is disabled (`disabled: true`) and a warning names what is missing:
+
+```
+level=warning msg="[Example] disabling peer: aut-num AS207960 is missing IRR policy: import from AS6939 accept (IPv4), export to AS6939 announce (IPv4)"
+```
+
+A peer has a single `disabled` option for all of its neighbors, so **the whole peer is disabled if any address family it has neighbors in lacks policy**. To keep an IPv6 session up when the peer only documents IPv6, configure the IPv4 and IPv6 neighbors as separate peers.
+
+If the WHOIS query fails, or an as-set needed for the decision can't be expanded, Pathvector logs a warning and leaves the peer as configured. The check is skipped with `pathvector generate --offline`. If the server has several `aut-num` objects for the ASN (for example mirrored from different IRR databases), the rules of all of them are combined. Only the peer expression, the `accept`/`announce` keyword and the `afi` list are interpreted; filters and actions are not evaluated.
+
 ## Failure handling
 
 IRR lookups depend on an external service, so a single unreachable IRR server, a timeout, or a broken as-set must not prevent the rest of the router configuration from being generated. If a bgpq4 query fails for a peer, Pathvector logs an error and keeps going with the other peers. The affected peer **fails safe**: its `import` is set to `false`, so every route received from it is rejected until the next successful run. Sessions stay up and routes are still exported to the peer.

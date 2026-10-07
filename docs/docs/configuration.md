@@ -1399,6 +1399,14 @@ Get AS set members automatically from the peer's IRR as-set? (independent from a
 |------|---------|------------|
 | bool   | false      |          |
 
+### `verify-irr-policy`
+
+Check the peer's aut-num object in the IRR (irr-server whois) for import (from us ... accept) and export (to us ... announce) policy, with us listed directly or through an as-set, and disable the peer if it's missing. Checked for each address family the peer has neighbors in; as there's one disabled flag per peer, the whole peer is disabled if any of them lacks policy. If the IRR can't be queried, a warning is shown and the peer is left as configured.
+
+| Type | Default | Validation |
+|------|---------|------------|
+| bool   | false      |          |
+
 ### `honor-graceful-shutdown`
 
 Should RFC8326 graceful shutdown be enabled?
