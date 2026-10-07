@@ -111,8 +111,10 @@ type Peer struct {
 	LocalPref6             *int      `yaml:"local-pref6" description:"IPv6 BGP local preference (overrides local-pref, not included in optimizer)" default:"-"`
 	SetLocalPref           *bool     `yaml:"set-local-pref" description:"Should an explicit local pref be set? (iBGP sessions without local-pref, local-pref4/6 or set-local-pref configured keep the local pref received from the neighbor)" default:"true"`
 	Multihop               *bool     `yaml:"multihop" description:"Should BGP multihop be enabled? (255 max hops)" default:"false"`
-	Listen4                *string   `yaml:"listen4" description:"IPv4 BGP listen address" default:"-"`
-	Listen6                *string   `yaml:"listen6" description:"IPv6 BGP listen address" default:"-"`
+	Listen4                *string   `yaml:"listen4" description:"IPv4 BGP listen address (local address the session is sourced from)" default:"-"`
+	Listen6                *string   `yaml:"listen6" description:"IPv6 BGP listen address (local address the session is sourced from)" default:"-"`
+	Source4                *string   `yaml:"source4" description:"Source IPv4 address of routes from this peer installed in the kernel (overrides the global source4)" default:"-"`
+	Source6                *string   `yaml:"source6" description:"Source IPv6 address of routes from this peer installed in the kernel (overrides the global source6)" default:"-"`
 	LocalASN               *int      `yaml:"local-asn" description:"Local ASN as defined in the global ASN field" default:"-"`
 	LocalPort              *int      `yaml:"local-port" description:"Local TCP port" default:"179"`
 	NeighborPort           *int      `yaml:"neighbor-port" description:"Neighbor TCP port" default:"179"`
@@ -375,8 +377,8 @@ type Config struct {
 	BGPQArgs      string `yaml:"bgpq-args" description:"Additional command line arguments to pass to bgpq4" default:""`
 	KeepFiltered  bool   `yaml:"keep-filtered" description:"Should filtered routes be kept in memory?" default:"false"`
 	MergePaths    bool   `yaml:"merge-paths" description:"Should best and equivalent non-best routes be imported to build ECMP routes?" default:"false"`
-	Source4       string `yaml:"source4" description:"Source IPv4 address"`
-	Source6       string `yaml:"source6" description:"Source IPv6 address"`
+	Source4       string `yaml:"source4" description:"Source IPv4 address of BGP routes installed in the kernel (krt_prefsrc), can be overridden per peer"`
+	Source6       string `yaml:"source6" description:"Source IPv6 address of BGP routes installed in the kernel (krt_prefsrc), can be overridden per peer"`
 	DefaultRoute  bool   `yaml:"default-route" description:"Add a default route" default:"true"`
 	AcceptDefault bool   `yaml:"accept-default" description:"Should default routes be accepted from peers? When false, default routes are rejected by filter-prefix-length. When true, learned default routes are preferred over the locally generated default route and installed in the kernel." default:"false"`
 	RPKIEnable    bool   `yaml:"rpki-enable" description:"Enable RPKI protocol" default:"true"`

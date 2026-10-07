@@ -129,11 +129,19 @@ module pathvector {
     }
     leaf listen4 {
       type string;
-      description "IPv4 BGP listen address";
+      description "IPv4 BGP listen address (local address the session is sourced from)";
     }
     leaf listen6 {
       type string;
-      description "IPv6 BGP listen address";
+      description "IPv6 BGP listen address (local address the session is sourced from)";
+    }
+    leaf source4 {
+      type string;
+      description "Source IPv4 address of routes from this peer installed in the kernel (overrides the global source4)";
+    }
+    leaf source6 {
+      type string;
+      description "Source IPv6 address of routes from this peer installed in the kernel (overrides the global source6)";
     }
     leaf local-asn {
       type int64;
@@ -789,11 +797,11 @@ module pathvector {
   }
   leaf source4 {
     type string;
-    description "Source IPv4 address";
+    description "Source IPv4 address of BGP routes installed in the kernel (krt_prefsrc), can be overridden per peer";
   }
   leaf source6 {
     type string;
-    description "Source IPv6 address";
+    description "Source IPv6 address of BGP routes installed in the kernel (krt_prefsrc), can be overridden per peer";
   }
   leaf default-route {
     type boolean;

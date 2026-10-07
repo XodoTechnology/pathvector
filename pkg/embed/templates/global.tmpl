@@ -93,7 +93,7 @@ protocol kernel kernel4 {
       if source = RTS_STATIC {{ if .Prefixes4 -}}&& proto != "static4"{{ end }} then {
         accept;
       } else if source = RTS_BGP then {
-        krt_prefsrc = {{ .Source4 }};
+        if !defined(krt_prefsrc) then krt_prefsrc = {{ .Source4 }};
         accept;
       }
       reject;
@@ -103,10 +103,10 @@ protocol kernel kernel4 {
       {{ else }}
       {{ $source4 := .Source4 }}
       {{ range $i, $community := StringSliceIter .Kernel.SRDStandardCommunities }}
-      if (({{ $community }}) ~ bgp_community) then { {{ if $source4 }}krt_prefsrc = {{ $source4 }};{{ end }} accept; }
+      if (({{ $community }}) ~ bgp_community) then { {{ if $source4 }}if !defined(krt_prefsrc) then krt_prefsrc = {{ $source4 }};{{ end }} accept; }
       {{ end }}
       {{ range $i, $community := StringSliceIter .Kernel.SRDLargeCommunities }}
-      if (({{ $community }}) ~ bgp_large_community) then { {{ if $source4 }}krt_prefsrc = {{ $source4 }};{{ end }} accept; }
+      if (({{ $community }}) ~ bgp_large_community) then { {{ if $source4 }}if !defined(krt_prefsrc) then krt_prefsrc = {{ $source4 }};{{ end }} accept; }
       {{ end }}
       reject;
       {{ end }}
@@ -136,7 +136,7 @@ protocol kernel kernel6 {
       if source = RTS_STATIC {{ if .Prefixes6 -}}&& proto != "static6"{{ end }} then {
         accept;
       } else if source = RTS_BGP then {
-        krt_prefsrc = {{ .Source6 }};
+        if !defined(krt_prefsrc) then krt_prefsrc = {{ .Source6 }};
         accept;
       } else {
         reject;
@@ -147,10 +147,10 @@ protocol kernel kernel6 {
       {{ else }}
       {{ $source6 := .Source6 }}
       {{ range $i, $community := StringSliceIter .Kernel.SRDStandardCommunities }}
-      if (({{ $community }}) ~ bgp_community) then { {{ if $source6 }}krt_prefsrc = {{ $source6 }};{{ end }} accept; }
+      if (({{ $community }}) ~ bgp_community) then { {{ if $source6 }}if !defined(krt_prefsrc) then krt_prefsrc = {{ $source6 }};{{ end }} accept; }
       {{ end }}
       {{ range $i, $community := StringSliceIter .Kernel.SRDLargeCommunities }}
-      if (({{ $community }}) ~ bgp_large_community) then { {{ if $source6 }}krt_prefsrc = {{ $source6 }};{{ end }} accept; }
+      if (({{ $community }}) ~ bgp_large_community) then { {{ if $source6 }}if !defined(krt_prefsrc) then krt_prefsrc = {{ $source6 }};{{ end }} accept; }
       {{ end }}
       reject;
       {{ end }}

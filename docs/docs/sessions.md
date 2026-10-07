@@ -52,3 +52,37 @@ peers:
 ```
 
 `cost` is a per-channel option in BIRD, which is why it can't be set with `session-global`.
+
+## Source addresses
+
+Pathvector has two kinds of "source" address:
+
+- **Session source address**: `listen4` and `listen6` set the local address a BGP session is sourced from (BIRD's
+  `local` address), for example a loopback address for multihop or iBGP sessions.
+- **Kernel route source address**: the global `source4` and `source6` set the preferred source address
+  (`krt_prefsrc`) of BGP routes installed in the kernel, which is the address the router itself uses when sending
+  traffic along those routes. The same options can be set per peer (or template) to override the global value for
+  routes learned from that peer, for example when one peer is reached over an IXP interface and another over a transit
+  link.
+
+```yaml
+source4: 192.0.2.1        # loopback, default for kernel routes
+source6: 2001:db8::1
+
+peers:
+  IXP Peer:
+    asn: 64496
+    neighbors:
+      - 198.51.100.2
+      - 2001:db8:ffff::2
+    source4: 198.51.100.1 # use the IXP interface address for routes from this peer
+    source6: 2001:db8:ffff::1
+  iBGP:
+    asn: 65530
+    neighbors:
+      - 192.0.2.2
+    listen4: 192.0.2.1    # source the session from the loopback
+    multihop: true
+```
+
+The kernel source address must be configured on an interface of the router, otherwise the kernel rejects the routes.

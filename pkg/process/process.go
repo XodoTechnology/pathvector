@@ -446,6 +446,18 @@ func Load(configBlob []byte) (*config.Config, error) {
 			return nil, fmt.Errorf("[%s] auto-as-set-members requires as-set or auto-as-set", peerName)
 		}
 
+		// Validate per-peer kernel source addresses
+		if peerData.Source4 != nil {
+			if ip := net.ParseIP(*peerData.Source4); ip == nil || ip.To4() == nil {
+				return nil, fmt.Errorf("[%s] invalid source4 address: %s", peerName, *peerData.Source4)
+			}
+		}
+		if peerData.Source6 != nil {
+			if ip := net.ParseIP(*peerData.Source6); ip == nil || ip.To4() != nil {
+				return nil, fmt.Errorf("[%s] invalid source6 address: %s", peerName, *peerData.Source6)
+			}
+		}
+
 		// Validate gateway mode
 		if peerData.Gateway != nil && *peerData.Gateway != "direct" && *peerData.Gateway != "recursive" {
 			return nil, fmt.Errorf("[%s] invalid gateway mode: %s (must be direct or recursive)", peerName, *peerData.Gateway)

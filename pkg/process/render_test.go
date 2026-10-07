@@ -257,3 +257,39 @@ peers:
 	assert.Contains(t, out["Core"], "cost 20;")
 	assert.NotContains(t, protocolLevel(out["Core"]), "cost", "cost is a channel option")
 }
+
+func TestRenderPeerSource(t *testing.T) {
+	out := renderConfig(t, `
+asn: 65530
+router-id: 192.0.2.1
+hostname: r1
+rpki-enable: false
+source4: 192.0.2.1
+source6: 2001:db8::1
+peers:
+  IX:
+    asn: 64496
+    source4: 198.51.100.1
+    source6: 2001:db8:ffff::1
+    neighbors: [198.51.100.2, 2001:db8:ffff::2]
+`)
+	conf := out["IX"]
+	v4 := conf[:strings.Index(conf, "ipv6 {")]
+	v6 := conf[strings.Index(conf, "ipv6 {"):]
+	assert.Contains(t, v4, "krt_prefsrc = 198.51.100.1;")
+	assert.NotContains(t, v4, "2001:db8:ffff::1")
+	assert.Contains(t, v6, "krt_prefsrc = 2001:db8:ffff::1;")
+	// The global source must not override the per-peer source in the kernel export filter
+	assert.Contains(t, out[""], "if !defined(krt_prefsrc) then krt_prefsrc = 192.0.2.1;")
+
+	_, err := Load([]byte(`
+asn: 65530
+router-id: 192.0.2.1
+peers:
+  IX:
+    asn: 64496
+    source4: 2001:db8::1
+    neighbors: [198.51.100.2]
+`))
+	assert.ErrorContains(t, err, "invalid source4 address")
+}

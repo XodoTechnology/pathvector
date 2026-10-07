@@ -239,7 +239,7 @@ Should best and equivalent non-best routes be imported to build ECMP routes?
 
 ### `source4`
 
-Source IPv4 address
+Source IPv4 address of BGP routes installed in the kernel (krt_prefsrc), can be overridden per peer
 
 | Type | Default | Validation |
 |------|---------|------------|
@@ -247,7 +247,7 @@ Source IPv4 address
 
 ### `source6`
 
-Source IPv6 address
+Source IPv6 address of BGP routes installed in the kernel (krt_prefsrc), can be overridden per peer
 
 | Type | Default | Validation |
 |------|---------|------------|
@@ -785,7 +785,7 @@ Should BGP multihop be enabled? (255 max hops)
 
 ### `listen4`
 
-IPv4 BGP listen address
+IPv4 BGP listen address (local address the session is sourced from)
 
 | Type | Default | Validation |
 |------|---------|------------|
@@ -793,7 +793,23 @@ IPv4 BGP listen address
 
 ### `listen6`
 
-IPv6 BGP listen address
+IPv6 BGP listen address (local address the session is sourced from)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| string   |       |          |
+
+### `source4`
+
+Source IPv4 address of routes from this peer installed in the kernel (overrides the global source4)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| string   |       |          |
+
+### `source6`
+
+Source IPv6 address of routes from this peer installed in the kernel (overrides the global source6)
 
 | Type | Default | Validation |
 |------|---------|------------|

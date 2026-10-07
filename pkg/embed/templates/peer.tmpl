@@ -120,6 +120,9 @@ protocol bgp {{ UniqueProtocolName $peer.ProtocolName $peerName $af $peer.ASN $p
 
             {{ if BoolDeref $peer.ForcePeerNexthop }}bgp_next_hop = {{ $neighborNoIface }};{{ end }}
 
+            {{ if and (eq $af "4") (StrDeref $peer.Source4) }}krt_prefsrc = {{ StrDeref $peer.Source4 }}; # source4{{ end }}
+            {{ if and (eq $af "6") (StrDeref $peer.Source6) }}krt_prefsrc = {{ StrDeref $peer.Source6 }}; # source6{{ end }}
+
             {{ if StrDeref $peer.ImportNextHop }}
             bgp_next_hop = {{ StrDeref $peer.ImportNextHop }};
             gw = {{ StrDeref $peer.ImportNextHop }};
