@@ -113,6 +113,29 @@ func sortCommunitiesPtr(communities *[]string) (*[]string, *[]string, error) {
 	return &standard, &large, nil
 }
 
+// splitPrefixesByAF splits a list of BIRD prefix set entries (optionally with a length range or +/- suffix) into IPv4 and IPv6 lists
+func splitPrefixesByAF(prefixes *[]string) (*[]string, *[]string, error) {
+	if prefixes == nil {
+		return nil, nil, nil
+	}
+	v4 := []string{}
+	v6 := []string{}
+	for _, prefix := range *prefixes {
+		// Strip BIRD prefix pattern suffixes such as {24,32}, + and -
+		bare := strings.TrimRight(strings.SplitN(prefix, "{", 2)[0], "+-")
+		pfx, _, err := net.ParseCIDR(strings.TrimSpace(bare))
+		if err != nil {
+			return nil, nil, fmt.Errorf("%s", prefix)
+		}
+		if pfx.To4() == nil {
+			v6 = append(v6, prefix)
+		} else {
+			v4 = append(v4, prefix)
+		}
+	}
+	return &v4, &v6, nil
+}
+
 func templateReplacements(in string, peer *config.Peer) string {
 	v := reflect.ValueOf(peer)
 	for v.Kind() == reflect.Ptr { // Dereference pointer types
@@ -501,6 +524,16 @@ func Load(configBlob []byte) (*config.Config, error) {
 					peerData.PrefixSet4 = &pfxSet4
 				}
 			}
+		}
+
+		// Split dont-announce and only-announce lists by address family
+		peerData.DontAnnounce4, peerData.DontAnnounce6, err = splitPrefixesByAF(peerData.DontAnnounce)
+		if err != nil {
+			return nil, fmt.Errorf("invalid dont-announce prefix: %v", err)
+		}
+		peerData.OnlyAnnounce4, peerData.OnlyAnnounce6, err = splitPrefixesByAF(peerData.OnlyAnnounce)
+		if err != nil {
+			return nil, fmt.Errorf("invalid only-announce prefix: %v", err)
 		}
 
 		// Categorize communities

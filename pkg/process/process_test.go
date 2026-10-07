@@ -290,3 +290,18 @@ peers:
 		}
 	}
 }
+
+func TestSplitPrefixesByAF(t *testing.T) {
+	v4, v6, err := splitPrefixesByAF(&[]string{"2001:db8::/32", "192.0.2.0/24", "198.51.100.0/24{24,32}", "2001:db8:1::/48+"})
+	assert.Nil(t, err)
+	assert.Equal(t, []string{"192.0.2.0/24", "198.51.100.0/24{24,32}"}, *v4)
+	assert.Equal(t, []string{"2001:db8::/32", "2001:db8:1::/48+"}, *v6)
+
+	v4, v6, err = splitPrefixesByAF(nil)
+	assert.Nil(t, err)
+	assert.Nil(t, v4)
+	assert.Nil(t, v6)
+
+	_, _, err = splitPrefixesByAF(&[]string{"not-a-prefix"})
+	assert.NotNil(t, err)
+}

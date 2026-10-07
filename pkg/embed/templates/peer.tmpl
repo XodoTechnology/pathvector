@@ -184,9 +184,10 @@ protocol bgp {{ UniqueProtocolName $peer.ProtocolName $peerName $af $peer.ASN $p
             {{ if $global.NoAnnounce }}reject; # no-announce: true{{ end }}
             {{ if (not (BoolDeref $peer.Export)) }}reject; # export: false{{ end }}
 
-            {{ if not (Empty $peer.DontAnnounce) }}
+            {{ $dontAnnounce := $peer.DontAnnounce4 }}{{ if eq $af "6" }}{{ $dontAnnounce = $peer.DontAnnounce6 }}{{ end }}
+            {{ if not (Empty $dontAnnounce) }}
             if (net ~ [
-            {{ BirdSet $peer.DontAnnounce }}
+            {{ BirdSet (StrSliceDeref $dontAnnounce) }}
             ]) then _reject("prefix in dont-announce list");
             {{ end }}
 
@@ -241,9 +242,14 @@ protocol bgp {{ UniqueProtocolName $peer.ProtocolName $peerName $af $peer.ASN $p
             {{ end }}
 
             {{ if not (Empty $peer.OnlyAnnounce) }}
+            {{ $onlyAnnounce := $peer.OnlyAnnounce4 }}{{ if eq $af "6" }}{{ $onlyAnnounce = $peer.OnlyAnnounce6 }}{{ end }}
+            {{ if not (Empty $onlyAnnounce) }}
             if !(net ~ [
-            {{ BirdSet $peer.OnlyAnnounce }}
+            {{ BirdSet (StrSliceDeref $onlyAnnounce) }}
             ]) then _reject("prefix not in only-announce list");
+            {{ else }}
+            _reject("no IPv{{ $af }} prefixes in only-announce list");
+            {{ end }}
             {{ end }}
 
             {{ if BoolDeref $peer.AnnounceOriginated }}

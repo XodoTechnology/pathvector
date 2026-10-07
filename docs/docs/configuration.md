@@ -1313,7 +1313,7 @@ Reject routes that aren't transited by an AS in this list
 
 ### `dont-announce`
 
-Don't announce these prefixes to the peer
+Don't announce these prefixes to the peer (IPv4 and IPv6 may be mixed)
 
 | Type | Default | Validation |
 |------|---------|------------|
@@ -1321,7 +1321,7 @@ Don't announce these prefixes to the peer
 
 ### `only-announce`
 
-Only announce these prefixes to the peer
+Only announce these prefixes to the peer (IPv4 and IPv6 may be mixed, an address family with no prefixes in the list will not be announced)
 
 | Type | Default | Validation |
 |------|---------|------------|

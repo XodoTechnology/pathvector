@@ -192,8 +192,8 @@ type Peer struct {
 
 	TransitLock *[]string `yaml:"transit-lock" description:"Reject routes that aren't transited by an AS in this list" default:"-"`
 
-	DontAnnounce *[]string `yaml:"dont-announce" description:"Don't announce these prefixes to the peer" default:"-"`
-	OnlyAnnounce *[]string `yaml:"only-announce" description:"Only announce these prefixes to the peer" default:"-"`
+	DontAnnounce *[]string `yaml:"dont-announce" description:"Don't announce these prefixes to the peer (IPv4 and IPv6 may be mixed)" default:"-"`
+	OnlyAnnounce *[]string `yaml:"only-announce" description:"Only announce these prefixes to the peer (IPv4 and IPv6 may be mixed, an address family with no prefixes in the list will not be announced)" default:"-"`
 
 	PrefixCommunities         *map[string][]string `yaml:"prefix-communities" description:"Map of prefix to community list to add to the prefix" default:"-"`
 	PrefixStandardCommunities *map[string][]string `yaml:"-" description:"-" default:"-"`
@@ -233,6 +233,10 @@ type Peer struct {
 	Protocols                   *[]string `yaml:"-" description:"-" default:"-"`
 	PrefixSet4                  *[]string `yaml:"-" description:"-" default:"-"`
 	PrefixSet6                  *[]string `yaml:"-" description:"-" default:"-"`
+	DontAnnounce4               *[]string `yaml:"-" description:"-" default:"-"`
+	DontAnnounce6               *[]string `yaml:"-" description:"-" default:"-"`
+	OnlyAnnounce4               *[]string `yaml:"-" description:"-" default:"-"`
+	OnlyAnnounce6               *[]string `yaml:"-" description:"-" default:"-"`
 	ImportStandardCommunities   *[]string `yaml:"-" description:"-" default:"-"`
 	ImportLargeCommunities      *[]string `yaml:"-" description:"-" default:"-"`
 	ExportStandardCommunities   *[]string `yaml:"-" description:"-" default:"-"`
