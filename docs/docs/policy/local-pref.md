@@ -32,3 +32,22 @@ peers:
     neighbors:
       - 192.0.2.3
 ```
+
+## Local preference by AS
+
+`as-prefs` maps an ASN to a local preference: routes whose AS path contains the ASN get that local preference on
+import. `as-prefs4` and `as-prefs6` do the same for only IPv4 or only IPv6 routes, and take precedence over `as-prefs`
+for their address family.
+
+```yaml
+peers:
+  Transit:
+    asn: 64496
+    neighbors:
+      - 203.0.113.1
+      - 2001:db8::1
+    as-prefs:
+      174: 90      # depreference paths via AS174 in both address families
+    as-prefs6:
+      6939: 120    # prefer IPv6 paths via AS6939
+```

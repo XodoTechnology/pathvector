@@ -148,7 +148,9 @@ type Peer struct {
 	RemoveCommunities    *[]string `yaml:"remove-communities" description:"List of communities to remove before from routes announced by this peer" default:"-"`
 	RemoveAllCommunities *int      `yaml:"remove-all-communities" description:"Remove all standard and large communities beginning with this value" default:"-"`
 
-	ASPrefs *map[uint32]uint32 `yaml:"as-prefs" description:"Map of ASN to import local pref (not included in optimizer)" default:"-"`
+	ASPrefs  *map[uint32]uint32 `yaml:"as-prefs" description:"Map of ASN to import local pref (not included in optimizer)" default:"-"`
+	ASPrefs4 *map[uint32]uint32 `yaml:"as-prefs4" description:"Map of ASN to import local pref for IPv4 routes (overrides as-prefs, not included in optimizer)" default:"-"`
+	ASPrefs6 *map[uint32]uint32 `yaml:"as-prefs6" description:"Map of ASN to import local pref for IPv6 routes (overrides as-prefs, not included in optimizer)" default:"-"`
 
 	CommunityPrefs         *map[string]uint32 `yaml:"community-prefs" description:"Map of community to import local pref (not included in optimizer)" default:"-"`
 	StandardCommunityPrefs *map[string]uint32 `yaml:"-" description:"-" default:"-"`

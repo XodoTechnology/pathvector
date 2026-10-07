@@ -129,3 +129,34 @@ peers:
 	assert.Contains(t, out["Transit"], "define AS6939_TRANSIT_IMPORT_v4 = 1000000;")
 	assert.Contains(t, out["Transit"], "define AS6939_TRANSIT_IMPORT_v6 = 300000;")
 }
+
+func TestRenderASPrefsPerAF(t *testing.T) {
+	out := renderConfig(t, `
+asn: 65530
+router-id: 192.0.2.1
+hostname: r1
+rpki-enable: false
+peers:
+  Peer:
+    asn: 64496
+    mp-unicast-46: true
+    as-prefs:
+      174: 90
+    as-prefs4:
+      6939: 80
+    as-prefs6:
+      6939: 120
+    neighbors: [192.0.2.1]
+`)
+	conf := out["Peer"]
+	v4 := conf[strings.Index(conf, "ipv4 {"):strings.Index(conf, "ipv6 {")]
+	v6 := conf[strings.Index(conf, "ipv6 {"):]
+	assert.Contains(t, v4, "if (174 ~ bgp_path) then { bgp_local_pref = 90; }")
+	assert.Contains(t, v6, "if (174 ~ bgp_path) then { bgp_local_pref = 90; }")
+	assert.Contains(t, v4, "if (6939 ~ bgp_path) then { bgp_local_pref = 80; }")
+	assert.NotContains(t, v4, "bgp_local_pref = 120")
+	assert.Contains(t, v6, "if (6939 ~ bgp_path) then { bgp_local_pref = 120; }")
+	assert.NotContains(t, v6, "bgp_local_pref = 80")
+	// AF-specific prefs are evaluated after as-prefs so they take precedence
+	assert.Less(t, strings.Index(v4, "bgp_local_pref = 90"), strings.Index(v4, "bgp_local_pref = 80"))
+}

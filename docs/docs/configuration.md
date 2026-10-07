@@ -1071,6 +1071,22 @@ Map of ASN to import local pref (not included in optimizer)
 |------|---------|------------|
 | map[uint32]uint32   |       |          |
 
+### `as-prefs4`
+
+Map of ASN to import local pref for IPv4 routes (overrides as-prefs, not included in optimizer)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| map[uint32]uint32   |       |          |
+
+### `as-prefs6`
+
+Map of ASN to import local pref for IPv6 routes (overrides as-prefs, not included in optimizer)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| map[uint32]uint32   |       |          |
+
 ### `community-prefs`
 
 Map of community to import local pref (not included in optimizer)

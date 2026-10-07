@@ -147,6 +147,10 @@ protocol bgp {{ UniqueProtocolName $peer.ProtocolName $peerName $af $peer.ASN $p
             {{ range $asn, $pref := Uint32MapDeref $peer.ASPrefs }}
             if ({{ $asn }} ~ bgp_path) then { bgp_local_pref = {{ $pref }}; }
             {{ end }}
+            {{ $afASPrefs := $peer.ASPrefs4 }}{{ if eq $af "6" }}{{ $afASPrefs = $peer.ASPrefs6 }}{{ end }}
+            {{ range $asn, $pref := Uint32MapDeref $afASPrefs }}
+            if ({{ $asn }} ~ bgp_path) then { bgp_local_pref = {{ $pref }}; } # as-prefs{{ $af }}
+            {{ end }}
 
             {{ range $community, $pref := StringUint32MapDeref $peer.StandardCommunityPrefs }}
             if (({{ $community }}) ~ bgp_community) then { bgp_local_pref = {{ $pref }}; }
