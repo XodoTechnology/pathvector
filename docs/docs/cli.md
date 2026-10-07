@@ -61,3 +61,15 @@ EXAMPLE_AS65510_v6: restarted
 ```
 
 The command exits with an error if any of the protocols could not be restarted (for example `No protocols match` for an unknown name).
+
+## birdsh
+
+`pathvector birdsh` is a lightweight BIRD shell. Run it without arguments for an interactive `bird>` prompt, or pass a command to run it once:
+
+```
+$ pathvector birdsh show protocols
+```
+
+It connects to the socket given by `--socket` (`-s`), or to the `bird-socket` config option if that flag is empty.
+
+`pathvector cli` is an alias of `birdsh` (`cli` was the original name of this command). If a plugin that provides its own `cli` command is installed, such as the [interactive configuration CLI](/docs/interactive), the plugin's command takes precedence.

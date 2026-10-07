@@ -70,9 +70,26 @@ func init() {
 	for _, p := range plugin.Get() {
 		pluginCommand := p.Command()
 		if pluginCommand != nil {
-			rootCmd.AddCommand(p.Command())
+			// A plugin may provide its own "cli" command (the interactive configuration CLI,
+			// documented as `pathvector cli`, was moved to a plugin). Cobra resolves a name to the
+			// first matching command, so drop birdsh's "cli" alias to let the plugin's command win.
+			if pluginCommand.Name() == "cli" || pluginCommand.HasAlias("cli") {
+				birdshCmd.Aliases = removeString(birdshCmd.Aliases, "cli")
+			}
+			rootCmd.AddCommand(pluginCommand)
 		}
 	}
+}
+
+// removeString returns s without any elements equal to r
+func removeString(s []string, r string) []string {
+	var out []string
+	for _, v := range s {
+		if v != r {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func Execute(v, c, d string) error {
