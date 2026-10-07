@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/natesales/pathvector/pkg/bird"
 	"github.com/natesales/pathvector/pkg/embed"
 	"github.com/natesales/pathvector/pkg/templating"
@@ -110,4 +112,20 @@ peers:
 	if !strings.Contains(protocolLevel(out["AS112"]), "advertise hostname on;") {
 		t.Errorf("advertise hostname not found at protocol level:\n%s", out["AS112"])
 	}
+}
+
+func TestRenderDefaultImportLimits(t *testing.T) {
+	out := renderConfig(t, `
+asn: 65530
+router-id: 192.0.2.1
+hostname: r1
+rpki-enable: false
+peers:
+  Transit:
+    asn: 6939
+    neighbors: [192.0.2.1, 2001:db8::1]
+`)
+	// Defaults must match the documented values (import-limit4: 1000000, import-limit6: 300000)
+	assert.Contains(t, out["Transit"], "define AS6939_TRANSIT_IMPORT_v4 = 1000000;")
+	assert.Contains(t, out["Transit"], "define AS6939_TRANSIT_IMPORT_v6 = 300000;")
 }
