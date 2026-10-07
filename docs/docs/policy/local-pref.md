@@ -33,6 +33,17 @@ peers:
       - 192.0.2.3
 ```
 
+## Local preference by community
+
+`community-prefs` maps a standard or large community to a local preference: routes carrying the community get that
+local preference on import.
+
+```yaml
+community-prefs:
+  "65530:0:200": 95
+  "64496:100": 110
+```
+
 ## Local preference by AS
 
 `as-prefs` maps an ASN to a local preference: routes whose AS path contains the ASN get that local preference on
@@ -51,3 +62,21 @@ peers:
     as-prefs6:
       6939: 120    # prefer IPv6 paths via AS6939
 ```
+
+## Precedence
+
+When several options match the same route, they are evaluated in this order, and the last match wins:
+
+1. `local-pref` (or the received value on iBGP, see above)
+2. `local-pref4` / `local-pref6`
+3. `community-prefs`
+4. `as-prefs`
+5. `as-prefs4` / `as-prefs6`
+
+For example, with `community-prefs: {"65530:0:200": 95}` and `as-prefs: {6939: 150}`, a route via AS6939 tagged with
+`65530:0:200` gets a local preference of 150.
+
+:::note
+Before this ordering was documented, `as-prefs` was evaluated before `community-prefs`, so community preferences took
+precedence over AS preferences.
+:::

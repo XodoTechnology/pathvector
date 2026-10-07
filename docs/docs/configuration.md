@@ -1089,7 +1089,7 @@ Map of ASN to import local pref for IPv6 routes (overrides as-prefs, not include
 
 ### `community-prefs`
 
-Map of community to import local pref (not included in optimizer)
+Map of community to import local pref (not included in optimizer, as-prefs take precedence)
 
 | Type | Default | Validation |
 |------|---------|------------|

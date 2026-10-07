@@ -152,7 +152,7 @@ type Peer struct {
 	ASPrefs4 *map[uint32]uint32 `yaml:"as-prefs4" description:"Map of ASN to import local pref for IPv4 routes (overrides as-prefs, not included in optimizer)" default:"-"`
 	ASPrefs6 *map[uint32]uint32 `yaml:"as-prefs6" description:"Map of ASN to import local pref for IPv6 routes (overrides as-prefs, not included in optimizer)" default:"-"`
 
-	CommunityPrefs         *map[string]uint32 `yaml:"community-prefs" description:"Map of community to import local pref (not included in optimizer)" default:"-"`
+	CommunityPrefs         *map[string]uint32 `yaml:"community-prefs" description:"Map of community to import local pref (not included in optimizer, as-prefs take precedence)" default:"-"`
 	StandardCommunityPrefs *map[string]uint32 `yaml:"-" description:"-" default:"-"`
 	LargeCommunityPrefs    *map[string]uint32 `yaml:"-" description:"-" default:"-"`
 

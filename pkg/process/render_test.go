@@ -160,3 +160,29 @@ peers:
 	// AF-specific prefs are evaluated after as-prefs so they take precedence
 	assert.Less(t, strings.Index(v4, "bgp_local_pref = 90"), strings.Index(v4, "bgp_local_pref = 80"))
 }
+
+func TestRenderLocalPrefPrecedence(t *testing.T) {
+	out := renderConfig(t, `
+asn: 65530
+router-id: 192.0.2.1
+hostname: r1
+rpki-enable: false
+peers:
+  Peer:
+    asn: 64496
+    local-pref: 100
+    community-prefs:
+      "65530:0:200": 95
+    as-prefs:
+      6939: 150
+    neighbors: [192.0.2.1]
+`)
+	conf := out["Peer"]
+	// Last match wins, so as-prefs must be evaluated after community-prefs to take precedence
+	localPref := strings.Index(conf, "bgp_local_pref = 100;")
+	communityPref := strings.Index(conf, "if ((65530,0,200) ~ bgp_large_community) then { bgp_local_pref = 95; }")
+	asPref := strings.Index(conf, "if (6939 ~ bgp_path) then { bgp_local_pref = 150; }")
+	assert.True(t, localPref >= 0 && communityPref >= 0 && asPref >= 0, conf)
+	assert.Less(t, localPref, communityPref)
+	assert.Less(t, communityPref, asPref)
+}
