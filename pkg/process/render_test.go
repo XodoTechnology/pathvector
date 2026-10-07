@@ -371,3 +371,35 @@ rpki-enable: false
 	_, err := Load([]byte("asn: 65530\nrouter-id: 192.0.2.1\ndisable-protocols: [bgp]\n"))
 	assert.ErrorContains(t, err, "invalid disable-protocols entry bgp")
 }
+
+func TestRenderKernelTables(t *testing.T) {
+	base := `
+asn: 65530
+router-id: 192.0.2.1
+hostname: r1
+rpki-enable: false
+source4: 192.0.2.1
+prefixes: [192.0.2.0/24]
+kernel:
+  table: 10
+  tables: [100, 200]
+  statics:
+    "198.51.100.0/24": 192.0.2.254
+`
+	out := renderConfig(t, base)
+	global := out[""]
+	for _, name := range []string{"kernel4_table100", "kernel6_table100", "kernel4_table200", "kernel6_table200"} {
+		assert.Contains(t, global, "protocol kernel "+name+" {")
+	}
+	assert.Contains(t, global, "kernel table 100;")
+	// The additional tables use the same export policy as the main kernel table
+	assert.Equal(t, 3, strings.Count(global, `if (proto = "statics4") then accept;`))
+	assert.Equal(t, 3, strings.Count(global, "if !defined(krt_prefsrc) then krt_prefsrc = 192.0.2.1;"))
+
+	// Without additional tables, only kernel4 and kernel6 are rendered
+	out = renderConfig(t, strings.ReplaceAll(base, "  tables: [100, 200]\n", ""))
+	assert.Equal(t, 2, strings.Count(out[""], "protocol kernel "))
+
+	_, err := Load([]byte(strings.ReplaceAll(base, "[100, 200]", "[10]")))
+	assert.ErrorContains(t, err, "invalid kernel table 10")
+}

@@ -561,6 +561,14 @@ Kernel table
 |------|---------|------------|
 | int   |       |          |
 
+### `tables`
+
+Additional kernel tables to export routes to, with the same export policy as the main kernel table (BIRD protocols kernel4_table<N> and kernel6_table<N>)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| []int   |       |          |
+
 ### `scan-time`
 
 Time in seconds between scans of the kernel routing table

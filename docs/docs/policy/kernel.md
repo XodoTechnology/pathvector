@@ -24,6 +24,29 @@ kernel:
   reject4: []             # BIRD protocols to never export to the kernel (IPv4)
 ```
 
+## Multiple kernel tables
+
+`kernel.tables` lists additional kernel routing tables to export routes to, for example for policy based routing or a
+management VRF. Every additional table gets the same export policy as the main kernel table (`kernel.table`, SRD
+communities, statics, source addresses, ...).
+
+```yaml
+kernel:
+  table: 254      # main table
+  tables: [ 100, 200 ]
+```
+
+Because BIRD only allows one kernel protocol per BIRD routing table, Pathvector creates, for each additional table `N`
+and address family:
+
+| BIRD object                 | Purpose                                          |
+|-----------------------------|--------------------------------------------------|
+| `kernel4_tableN_rib`        | BIRD routing table holding a copy of `master4`   |
+| `kernel4_tableN_pipe`       | Pipe copying routes from `master4` into it       |
+| `kernel4_tableN`            | Kernel protocol exporting to kernel table `N`    |
+
+(and the same with `6` for IPv6). Routes are only exported to the additional tables, they are not learned from them.
+
 ## Static routes
 
 `kernel.statics` maps a prefix to a next hop (optionally with an interface, `fe80::1%eth0`). Static routes are placed

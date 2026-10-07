@@ -304,6 +304,7 @@ type Kernel struct {
 	Export          bool              `yaml:"export" description:"Export routes to kernel routing table" default:"true"`
 	RejectConnected bool              `yaml:"reject-connected" description:"Don't export connected routes (RTS_DEVICE) to kernel?'" default:"false"`
 	Table           int               `yaml:"table" description:"Kernel table"`
+	Tables          []int             `yaml:"tables" description:"Additional kernel tables to export routes to, with the same export policy as the main kernel table (BIRD protocols kernel4_table<N> and kernel6_table<N>)"`
 	ScanTime        int               `yaml:"scan-time" description:"Time in seconds between scans of the kernel routing table" default:"10"`
 
 	SRDStandardCommunities []string          `yaml:"-" description:"-"`

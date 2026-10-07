@@ -335,6 +335,13 @@ func Load(configBlob []byte) (*config.Config, error) {
 		return nil, fmt.Errorf("validation: %s", err)
 	}
 
+	// Validate additional kernel tables
+	for _, table := range c.Kernel.Tables {
+		if table <= 0 || table == c.Kernel.Table {
+			return nil, fmt.Errorf("invalid kernel table %d in kernel.tables (must be positive and differ from kernel.table)", table)
+		}
+	}
+
 	// Validate disabled built-in protocols
 	for _, protocol := range c.DisableProtocols {
 		if protocol != "device" && protocol != "direct" && protocol != "kernel4" && protocol != "kernel6" {

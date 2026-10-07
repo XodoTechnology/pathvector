@@ -90,38 +90,7 @@ protocol kernel kernel4 {
   {{ if .Kernel.Table }}kernel table {{ .Kernel.Table }};{{ end }}
   ipv4 {
     export filter {
-      {{ if .Kernel.Export }}
-      {{ if .Kernel.RejectConnected }}if source = RTS_DEVICE then reject;{{ end }}
-      {{ if .Kernel.Statics4 }}if (proto = "statics4") then accept;{{ end }}
-      {{ $length := len .Kernel.SRDCommunities }}{{ if eq $length 0 }}
-      {{- range $i, $rule := .Kernel.Accept4 }}
-      if (proto = "{{ $rule }}") then accept;
-      {{- end }}
-      {{- range $i, $rule := .Kernel.Reject4 }}
-      if (proto = "{{ $rule }}") then reject;
-      {{- end }}
-      {{ if .Source4 -}}
-      if source = RTS_STATIC {{ if .Prefixes4 -}}&& proto != "static4"{{ end }} then {
-        accept;
-      } else if source = RTS_BGP then {
-        if !defined(krt_prefsrc) then krt_prefsrc = {{ .Source4 }};
-        accept;
-      }
-      reject;
-      {{ else }}
-      accept;
-      {{ end }}
-      {{ else }}
-      {{ $source4 := .Source4 }}
-      {{ range $i, $community := StringSliceIter .Kernel.SRDStandardCommunities }}
-      if (({{ $community }}) ~ bgp_community) then { {{ if $source4 }}if !defined(krt_prefsrc) then krt_prefsrc = {{ $source4 }};{{ end }} accept; }
-      {{ end }}
-      {{ range $i, $community := StringSliceIter .Kernel.SRDLargeCommunities }}
-      if (({{ $community }}) ~ bgp_large_community) then { {{ if $source4 }}if !defined(krt_prefsrc) then krt_prefsrc = {{ $source4 }};{{ end }} accept; }
-      {{ end }}
-      reject;
-      {{ end }}
-      {{ else }}reject;{{ end }}
+      {{ template "kernelExport4" . }}
     };
   };
   {{ if .MergePaths }}merge paths;{{ end }}
@@ -135,43 +104,38 @@ protocol kernel kernel6 {
   {{ if .Kernel.Table }}kernel table {{ .Kernel.Table }};{{ end }}
   ipv6 {
     export filter {
-      {{ if .Kernel.Export }}
-      {{ if .Kernel.RejectConnected }}if source = RTS_DEVICE then reject;{{ end }}
-      {{ if .Kernel.Statics6 }}if (proto = "statics6") then accept;{{ end }}
-      {{ $length := len .Kernel.SRDCommunities }}{{ if eq $length 0 }}
-      {{- range $i, $rule := .Kernel.Accept6 }}
-      if (proto = "{{ $rule }}") then accept;
-      {{- end }}
-      {{- range $i, $rule := .Kernel.Reject6 }}
-      if (proto = "{{ $rule }}") then reject;
-      {{- end }}
-      {{ if .Source6 -}}
-      if source = RTS_STATIC {{ if .Prefixes6 -}}&& proto != "static6"{{ end }} then {
-        accept;
-      } else if source = RTS_BGP then {
-        if !defined(krt_prefsrc) then krt_prefsrc = {{ .Source6 }};
-        accept;
-      } else {
-        reject;
-      }
-      {{ else }}
-      accept;
-      {{ end }}
-      {{ else }}
-      {{ $source6 := .Source6 }}
-      {{ range $i, $community := StringSliceIter .Kernel.SRDStandardCommunities }}
-      if (({{ $community }}) ~ bgp_community) then { {{ if $source6 }}if !defined(krt_prefsrc) then krt_prefsrc = {{ $source6 }};{{ end }} accept; }
-      {{ end }}
-      {{ range $i, $community := StringSliceIter .Kernel.SRDLargeCommunities }}
-      if (({{ $community }}) ~ bgp_large_community) then { {{ if $source6 }}if !defined(krt_prefsrc) then krt_prefsrc = {{ $source6 }};{{ end }} accept; }
-      {{ end }}
-      reject;
-      {{ end }}
-      {{ else }}reject;{{ end }}
+      {{ template "kernelExport6" . }}
     };
   };
   {{ if .MergePaths }}merge paths;{{ end }}
 }
+{{ end }}
+
+{{ $global := . }}
+{{ range $i, $table := .Kernel.Tables }}
+{{ range $j, $af := MakeSlice "4" "6" }}
+# BIRD allows one kernel protocol per BIRD table, so each additional kernel table gets its own BIRD table fed from master{{ $af }} by a pipe
+ipv{{ $af }} table kernel{{ $af }}_table{{ $table }}_rib;
+
+protocol pipe kernel{{ $af }}_table{{ $table }}_pipe {
+  table master{{ $af }};
+  peer table kernel{{ $af }}_table{{ $table }}_rib;
+  export all;
+  import none;
+}
+
+protocol kernel kernel{{ $af }}_table{{ $table }} {
+  scan time {{ $global.Kernel.ScanTime }};
+  kernel table {{ $table }};
+  ipv{{ $af }} {
+    table kernel{{ $af }}_table{{ $table }}_rib;
+    export filter {
+      {{ if eq $af "4" }}{{ template "kernelExport4" $global }}{{ else }}{{ template "kernelExport6" $global }}{{ end }}
+    };
+  };
+  {{ if $global.MergePaths }}merge paths;{{ end }}
+}
+{{ end }}
 {{ end }}
 
 # --- Blackholing ---
@@ -423,3 +387,76 @@ protocol mrt {{ StrDeref $instance.ProtocolName }} {
 
 include "manual*.conf";
 include "AS*.conf";
+
+{{/* Kernel export filter body for IPv4, shared by kernel4 and the additional kernel tables */}}
+{{ define "kernelExport4" }}
+      {{ if .Kernel.Export }}
+      {{ if .Kernel.RejectConnected }}if source = RTS_DEVICE then reject;{{ end }}
+      {{ if .Kernel.Statics4 }}if (proto = "statics4") then accept;{{ end }}
+      {{ $length := len .Kernel.SRDCommunities }}{{ if eq $length 0 }}
+      {{- range $i, $rule := .Kernel.Accept4 }}
+      if (proto = "{{ $rule }}") then accept;
+      {{- end }}
+      {{- range $i, $rule := .Kernel.Reject4 }}
+      if (proto = "{{ $rule }}") then reject;
+      {{- end }}
+      {{ if .Source4 -}}
+      if source = RTS_STATIC {{ if .Prefixes4 -}}&& proto != "static4"{{ end }} then {
+        accept;
+      } else if source = RTS_BGP then {
+        if !defined(krt_prefsrc) then krt_prefsrc = {{ .Source4 }};
+        accept;
+      }
+      reject;
+      {{ else }}
+      accept;
+      {{ end }}
+      {{ else }}
+      {{ $source4 := .Source4 }}
+      {{ range $i, $community := StringSliceIter .Kernel.SRDStandardCommunities }}
+      if (({{ $community }}) ~ bgp_community) then { {{ if $source4 }}if !defined(krt_prefsrc) then krt_prefsrc = {{ $source4 }};{{ end }} accept; }
+      {{ end }}
+      {{ range $i, $community := StringSliceIter .Kernel.SRDLargeCommunities }}
+      if (({{ $community }}) ~ bgp_large_community) then { {{ if $source4 }}if !defined(krt_prefsrc) then krt_prefsrc = {{ $source4 }};{{ end }} accept; }
+      {{ end }}
+      reject;
+      {{ end }}
+      {{ else }}reject;{{ end }}
+{{ end }}
+
+{{/* Kernel export filter body for IPv6, shared by kernel6 and the additional kernel tables */}}
+{{ define "kernelExport6" }}
+      {{ if .Kernel.Export }}
+      {{ if .Kernel.RejectConnected }}if source = RTS_DEVICE then reject;{{ end }}
+      {{ if .Kernel.Statics6 }}if (proto = "statics6") then accept;{{ end }}
+      {{ $length := len .Kernel.SRDCommunities }}{{ if eq $length 0 }}
+      {{- range $i, $rule := .Kernel.Accept6 }}
+      if (proto = "{{ $rule }}") then accept;
+      {{- end }}
+      {{- range $i, $rule := .Kernel.Reject6 }}
+      if (proto = "{{ $rule }}") then reject;
+      {{- end }}
+      {{ if .Source6 -}}
+      if source = RTS_STATIC {{ if .Prefixes6 -}}&& proto != "static6"{{ end }} then {
+        accept;
+      } else if source = RTS_BGP then {
+        if !defined(krt_prefsrc) then krt_prefsrc = {{ .Source6 }};
+        accept;
+      } else {
+        reject;
+      }
+      {{ else }}
+      accept;
+      {{ end }}
+      {{ else }}
+      {{ $source6 := .Source6 }}
+      {{ range $i, $community := StringSliceIter .Kernel.SRDStandardCommunities }}
+      if (({{ $community }}) ~ bgp_community) then { {{ if $source6 }}if !defined(krt_prefsrc) then krt_prefsrc = {{ $source6 }};{{ end }} accept; }
+      {{ end }}
+      {{ range $i, $community := StringSliceIter .Kernel.SRDLargeCommunities }}
+      if (({{ $community }}) ~ bgp_large_community) then { {{ if $source6 }}if !defined(krt_prefsrc) then krt_prefsrc = {{ $source6 }};{{ end }} accept; }
+      {{ end }}
+      reject;
+      {{ end }}
+      {{ else }}reject;{{ end }}
+{{ end }}
