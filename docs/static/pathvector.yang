@@ -53,7 +53,11 @@ module pathvector {
     description "Peer configuration";
     leaf template {
       type string;
-      description "Configuration template";
+      description "Configuration template (templates may also set a parent template)";
+    }
+    leaf merge-template-lists {
+      type boolean;
+      description "Merge list and map options configured on both this peer and its template instead of replacing the template's value (lists are appended to the template's, map entries override the template's)";
     }
     leaf description {
       type string;

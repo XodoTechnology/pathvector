@@ -145,6 +145,86 @@ func resolveCommunitiesPtr(names map[string]string, communities *[]string) *[]st
 	return &out
 }
 
+// applyTemplate copies the fields configured on a template to a peer (or child template) that doesn't configure them.
+// If merge-template-lists is enabled (on the peer or the template), list and map fields configured on both are merged:
+// lists are concatenated (template entries first) and map entries from the peer override the template's.
+// Merged values are newly allocated so values shared with the template aren't modified.
+func applyTemplate(peer *config.Peer, template *config.Peer) {
+	merge := util.Deref(template.MergeTemplateLists)
+	if peer.MergeTemplateLists != nil {
+		merge = *peer.MergeTemplateLists
+	}
+
+	templateValue := reflect.ValueOf(template).Elem()
+	peerValue := reflect.ValueOf(peer).Elem()
+	for i := 0; i < templateValue.NumField(); i++ {
+		fieldName := templateValue.Type().Field(i).Name
+		if fieldName == "Template" { // Ignore the template field
+			continue
+		}
+		tValue := templateValue.Field(i)
+		pValue := peerValue.Field(i)
+		if tValue.IsNil() {
+			continue
+		}
+		if pValue.IsNil() {
+			// Use the template's value
+			pValue.Set(tValue)
+			continue
+		}
+		if !merge {
+			continue
+		}
+		switch tValue.Elem().Kind() {
+		case reflect.Slice:
+			merged := reflect.MakeSlice(tValue.Elem().Type(), 0, tValue.Elem().Len()+pValue.Elem().Len())
+			merged = reflect.AppendSlice(merged, tValue.Elem())
+			merged = reflect.AppendSlice(merged, pValue.Elem())
+			ptr := reflect.New(merged.Type())
+			ptr.Elem().Set(merged)
+			pValue.Set(ptr)
+		case reflect.Map:
+			merged := reflect.MakeMap(tValue.Elem().Type())
+			for _, src := range []reflect.Value{tValue.Elem(), pValue.Elem()} {
+				iter := src.MapRange()
+				for iter.Next() {
+					merged.SetMapIndex(iter.Key(), iter.Value())
+				}
+			}
+			ptr := reflect.New(merged.Type())
+			ptr.Elem().Set(merged)
+			pValue.Set(ptr)
+		}
+	}
+}
+
+// resolveTemplate applies a template's parent templates to it, recursively. resolved tracks templates that have
+// already been resolved and chain is used to detect inheritance loops.
+func resolveTemplate(templates map[string]*config.Peer, name string, resolved map[string]bool, chain []string) error {
+	if resolved[name] {
+		return nil
+	}
+	for _, n := range chain {
+		if n == name {
+			return fmt.Errorf("template inheritance loop: %s -> %s", strings.Join(chain, " -> "), name)
+		}
+	}
+	template := templates[name]
+	if template.Template != nil && *template.Template != "" {
+		parentName := *template.Template
+		parent, ok := templates[parentName]
+		if !ok {
+			return fmt.Errorf("template %s has parent template %s which is not defined", name, parentName)
+		}
+		if err := resolveTemplate(templates, parentName, resolved, append(chain, name)); err != nil {
+			return err
+		}
+		applyTemplate(template, parent)
+	}
+	resolved[name] = true
+	return nil
+}
+
 // splitPrefixesByAF splits a list of BIRD prefix set entries (optionally with a length range or +/- suffix) into IPv4 and IPv6 lists
 func splitPrefixesByAF(prefixes *[]string) (*[]string, *[]string, error) {
 	if prefixes == nil {
@@ -265,10 +345,11 @@ func Load(configBlob []byte) (*config.Config, error) {
 		}
 	}
 
-	// Check for invalid templates
-	for templateName, templateData := range c.Templates {
-		if templateData.Template != nil && *templateData.Template != "" {
-			log.Fatalf("Templates must not have a template field set, but %s does", templateName)
+	// Resolve template inheritance (templates may set a parent template)
+	resolvedTemplates := map[string]bool{}
+	for templateName := range c.Templates {
+		if err := resolveTemplate(c.Templates, templateName, resolvedTemplates, nil); err != nil {
+			return nil, err
 		}
 	}
 
@@ -316,28 +397,8 @@ func Load(configBlob []byte) (*config.Config, error) {
 			template := c.Templates[*peerData.Template]
 			if template == nil {
 				log.Fatalf("Template %s not found", *peerData.Template)
-			} else {
-				templateValue := reflect.ValueOf(*template)
-				peerValue := reflect.ValueOf(c.Peers[peerName]).Elem()
-
-				templateValueType := templateValue.Type()
-				for i := 0; i < templateValueType.NumField(); i++ {
-					fieldName := templateValueType.Field(i).Name
-					peerFieldValue := peerValue.FieldByName(fieldName)
-					if fieldName != "Template" { // Ignore the template field
-						pVal := reflect.Indirect(peerFieldValue)
-						peerHasValueConfigured := pVal.IsValid()
-						tValue := templateValue.Field(i)
-						templateHasValueConfigured := !tValue.IsNil()
-						if templateHasValueConfigured && !peerHasValueConfigured {
-							// Use the template's value
-							peerFieldValue.Set(templateValue.Field(i))
-						}
-
-						log.Tracef("[%s] field: %s template's value: %+v kind: %T templateHasValueConfigured: %v", peerName, fieldName, reflect.Indirect(tValue), tValue.Kind().String(), templateHasValueConfigured)
-					}
-				}
 			}
+			applyTemplate(peerData, template)
 		} // end peer template processor
 
 		// Record whether local pref options were configured (on the peer or its template) before defaults are applied

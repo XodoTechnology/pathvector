@@ -665,11 +665,19 @@ Exit optimizer on cache full
 ## Peer
 ### `template`
 
-Configuration template
+Configuration template (templates may also set a parent template)
 
 | Type | Default | Validation |
 |------|---------|------------|
 | string   |       |          |
+
+### `merge-template-lists`
+
+Merge list and map options configured on both this peer and its template instead of replacing the template's value (lists are appended to the template's, map entries override the template's)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| bool   |       |          |
 
 ### `description`
 

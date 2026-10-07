@@ -461,3 +461,72 @@ peers:
 		assert.NoError(t, err)
 	}
 }
+
+func TestTemplateParentInheritance(t *testing.T) {
+	c, err := Load([]byte(`
+asn: 34553
+router-id: 192.0.2.1
+templates:
+  base:
+    local-pref: 90
+    filter-transit-asns: true
+    add-on-import: ["34553:0:1"]
+  ix:
+    template: base
+    local-pref: 110
+    add-on-import: ["34553:0:2"]
+  ix-merge:
+    template: base
+    merge-template-lists: true
+    add-on-import: ["34553:0:2"]
+peers:
+  Peer 1:
+    asn: 65510
+    template: ix
+    neighbors: [192.0.2.2]
+  Peer 2:
+    asn: 65520
+    template: ix-merge
+    merge-template-lists: true
+    add-on-import: ["34553:0:3"]
+    neighbors: [192.0.2.3]
+  Peer 3:
+    asn: 65530
+    template: ix-merge
+    neighbors: [192.0.2.4]
+`))
+	assert.NoError(t, err)
+	p1 := c.Peers["Peer 1"]
+	assert.Equal(t, 110, *p1.LocalPref, "child template overrides parent")
+	assert.True(t, *p1.FilterTransitASNs, "inherited from parent template")
+	assert.Equal(t, []string{"34553:0:2"}, *p1.ImportCommunities, "lists replace by default")
+
+	p2 := c.Peers["Peer 2"]
+	assert.Equal(t, 90, *p2.LocalPref)
+	assert.Equal(t, []string{"34553:0:1", "34553:0:2", "34553:0:3"}, *p2.ImportCommunities, "lists merged through the template chain")
+
+	p3 := c.Peers["Peer 3"]
+	assert.Equal(t, []string{"34553:0:1", "34553:0:2"}, *p3.ImportCommunities, "merging into one peer doesn't modify the template")
+}
+
+func TestTemplateInheritanceLoop(t *testing.T) {
+	_, err := Load([]byte(`
+asn: 34553
+router-id: 192.0.2.1
+templates:
+  a:
+    template: b
+  b:
+    template: a
+`))
+	assert.ErrorContains(t, err, "template inheritance loop")
+
+	_, err = Load([]byte(`
+asn: 34553
+router-id: 192.0.2.1
+templates:
+  a:
+    template: missing
+`))
+	assert.ErrorContains(t, err, "parent template missing which is not defined")
+}

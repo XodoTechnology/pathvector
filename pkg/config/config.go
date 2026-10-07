@@ -91,7 +91,8 @@ var defaultBogonASNs = []string{
 
 // Peer stores a single peer config
 type Peer struct {
-	Template *string `yaml:"template" description:"Configuration template" default:"-"`
+	Template           *string `yaml:"template" description:"Configuration template (templates may also set a parent template)" default:"-"`
+	MergeTemplateLists *bool   `yaml:"merge-template-lists" description:"Merge list and map options configured on both this peer and its template instead of replacing the template's value (lists are appended to the template's, map entries override the template's)" default:"-"`
 
 	Description *string   `yaml:"description" description:"Peer description" default:"-"`
 	Tags        *[]string `yaml:"tags" description:"Peer tags" default:"-"`
