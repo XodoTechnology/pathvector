@@ -58,6 +58,11 @@ func read(r io.Reader, w io.Writer) bool {
 				panic(err)
 			}
 		}
+		// "dddd-" means more lines follow, "dddd " marks the last line of a reply.
+		// Codes 0xxx/8xxx/9xxx are final unless continued, e.g. "0012-s4: restarted\n s6: restarted\n0000 \n"
+		if c[4] == byte('-') {
+			return true
+		}
 		return c[0] != byte('0') && c[0] != byte('8') && c[0] != byte('9')
 	} else {
 		if w != nil {
@@ -70,14 +75,13 @@ func read(r io.Reader, w io.Writer) bool {
 }
 
 // Read reads the full BIRD response as a string
-func Read(r io.Reader) (out string, err error) {
+func Read(r io.Reader) (resp string, err error) {
+	// read panics on socket errors, so recover and return them as errors
 	defer func() {
 		if rec := recover(); rec != nil {
-			out = ""
-			err = fmt.Errorf("reading BIRD socket: %v", rec)
+			resp, err = "", fmt.Errorf("%v", rec)
 		}
 	}()
-
 	var buf bytes.Buffer
 	for read(r, &buf) {
 	}
@@ -104,6 +108,9 @@ func ReadClean(r io.Reader) {
 // the caller passes a timeout <= 0
 const DefaultCommandTimeout = 60 * time.Second
 
+// versionRegex matches a BIRD version string such as "BIRD 2.14" or "BIRD v2.0.10"
+var versionRegex = regexp.MustCompile(`BIRD\s+v?(\d+(?:\.\d+)+)`)
+
 // RunCommand runs a BIRD command and returns the output, version, and error.
 // A timeout <= 0 uses DefaultCommandTimeout.
 func RunCommand(command string, socket string, timeout time.Duration) (string, string, error) {
@@ -126,37 +133,80 @@ func RunCommand(command string, socket string, timeout time.Duration) (string, s
 	//noinspection GoUnhandledErrorResult
 	defer conn.Close()
 
-	log.Debug("Connected to BIRD socket")
+	return runCommand(conn, command)
+}
+
+// UnknownVersion is returned as the BIRD version when it can't be determined
+const UnknownVersion = "unknown"
+
+// ParseVersion extracts the BIRD version from a BIRD greeting (e.g. "BIRD 2.14 ready.")
+// or "show status" output (e.g. "BIRD 2.14"), returning an empty string if no version is present
+func ParseVersion(s string) string {
+	m := versionRegex.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return ""
+	}
+	return m[1]
+}
+
+// toSemver converts a BIRD version string to a golang.org/x/mod/semver compatible version
+func toSemver(v string) string {
+	parts := strings.Split(strings.TrimPrefix(v, "v"), ".")
+	if len(parts) > 3 {
+		parts = parts[:3]
+	}
+	return "v" + strings.Join(parts, ".")
+}
+
+// OlderThanSupported checks if a BIRD version is older than the minimum supported version.
+// Unparseable versions are never considered older.
+func OlderThanSupported(birdVersion string) bool {
+	v := toSemver(birdVersion)
+	if !semver.IsValid(v) {
+		return false
+	}
+	return semver.Compare(v, toSemver(supportedMin)) == -1
+}
+
+// runCommand runs a BIRD command over an established BIRD control connection
+func runCommand(conn io.ReadWriter, command string) (string, string, error) {
 	resp, err := Read(conn)
 	if err != nil {
 		return "", "", err
 	}
 	log.Debugf("BIRD init response: %s", resp)
 
-	// Check BIRD version — the banner is a "0001 BIRD <ver> ready." line;
-	// an empty/short read (socket EOFs while BIRD reconfigures) used to
-	// panic here on [1]
-	birdParts := strings.Fields(resp)
-	birdVersion := ""
-	for i, p := range birdParts {
-		if p == "BIRD" && i+1 < len(birdParts) {
-			birdVersion = strings.TrimSuffix(birdParts[i+1], ".")
-			break
+	// Check BIRD version. Some BIRD builds don't include the version in the greeting
+	// (e.g. "0001 BIRD ready."), so fall back to querying "show status".
+	birdVersion := ParseVersion(resp)
+	if birdVersion == "" {
+		log.Debug("BIRD version not found in greeting, querying show status")
+		if _, err := conn.Write([]byte("show status\n")); err != nil {
+			return "", "", err
 		}
+		statusResp, err := Read(conn)
+		if err != nil {
+			return "", "", err
+		}
+		birdVersion = ParseVersion(statusResp)
 	}
 	if birdVersion == "" {
-		return "", "", fmt.Errorf("unparseable BIRD banner %q — daemon may be mid-reload", resp)
-	}
-	if semver.Compare(birdVersion, supportedMin) == -1 {
+		birdVersion = UnknownVersion
+	} else if OlderThanSupported(birdVersion) {
 		log.Warnf("BIRD version %s older than minimum supported version %s", birdVersion, supportedMin)
 	}
 
+	// An empty command only queries the version
+	command = strings.Trim(command, "\r\n")
+	if command == "" {
+		return "", birdVersion, nil
+	}
+
 	log.Debugf("Sending BIRD command: %s", command)
-	_, err = conn.Write([]byte(strings.Trim(command, "\n") + "\n"))
-	log.Debugf("Sent BIRD command: %s", command)
-	if err != nil {
+	if _, err := conn.Write([]byte(command + "\n")); err != nil {
 		return "", "", err
 	}
+	log.Debugf("Sent BIRD command: %s", command)
 
 	log.Debugln("Reading from socket")
 	resp, err = Read(conn)
@@ -165,7 +215,7 @@ func RunCommand(command string, socket string, timeout time.Duration) (string, s
 	}
 	log.Debugln("Done reading from socket")
 
-	return resp, birdVersion, nil // nil error
+	return resp, birdVersion, nil
 }
 
 // Validate checks if the cached configuration is syntactically valid
@@ -218,7 +268,12 @@ func Validate(binary string, cacheDir string) error {
 					errorMessageToLog += scanner.Text() + "\n"
 				}
 				if line == errorLine {
-					errorMessageToLog += strings.Repeat(" ", errorChar-1) + "^ " + errorMessage + "\n"
+					// BIRD reports column 0 for errors that aren't tied to a position (e.g. "No protocol is specified")
+					indent := errorChar - 1
+					if indent < 0 {
+						indent = 0
+					}
+					errorMessageToLog += strings.Repeat(" ", indent) + "^ " + errorMessage + "\n"
 				}
 				line++
 			}
@@ -288,6 +343,19 @@ func MoveCacheAndReconfigure(birdDirectory string, cacheDirectory string, birdSo
 	}
 
 	return nil
+}
+
+// Reconfigure tells BIRD to reload its configuration files
+func Reconfigure(birdSocket string) {
+	log.Info("Reconfiguring BIRD")
+	resp, _, err := RunCommand("configure", birdSocket, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Print bird output as multiple lines
+	for _, line := range strings.Split(strings.Trim(resp, "\n"), "\n") {
+		log.Printf("BIRD response (multiline): %s", line)
+	}
 }
 
 // Reformat takes a BIRD config file as a string and outputs a nicely formatted version as a string

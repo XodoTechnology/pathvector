@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,6 +54,11 @@ func Reset() {
 var funcMap = template.FuncMap{
 	"Contains": strings.Contains,
 
+	// SliceContains checks if a string slice contains a string
+	"SliceContains": func(slice []string, s string) bool {
+		return util.Contains(slice, s)
+	},
+
 	"Iterate": func(count *int) []int {
 		// Create array with `count` entries
 		var i int
@@ -97,9 +103,19 @@ var funcMap = template.FuncMap{
 		return output
 	},
 
-	"Empty": func(arr *[]string) bool {
-		// Is `arr` empty?
-		return arr == nil || len(*arr) == 0
+	"Empty": func(arr interface{}) bool {
+		// Is `arr` empty? Accepts nil or a pointer to any slice/map/string
+		if arr == nil {
+			return true
+		}
+		v := reflect.ValueOf(arr)
+		for v.Kind() == reflect.Ptr {
+			if v.IsNil() {
+				return true
+			}
+			v = v.Elem()
+		}
+		return v.Len() == 0
 	},
 
 	"Timestamp": func(format string) string {
@@ -214,7 +230,16 @@ var funcMap = template.FuncMap{
 	// silently renaming the protocol (a renamed protocol tears the session down on reconfigure).
 	"UniqueProtocolName": func(s, userSuppliedName *string, af string, asn *int, tags *[]string) (string, error) {
 		protoName := fmt.Sprintf("%s_AS%d_v%s", *s, *asn, af)
-		if util.Contains(protocolNames, protoName) {
+		// Peers are rendered concurrently, so protocolNames and protocolNameMap must be accessed under the lock
+		protocolNameMapLock.Lock()
+		defer protocolNameMapLock.Unlock()
+		if existing, ok := protocolNameMap[protoName]; ok {
+			// The same peer rendering the same name again (e.g. a re-render within one
+			// process) is not a collision — only a different peer name claiming the
+			// same protocol name is a config error.
+			if existing.Name == *userSuppliedName {
+				return protoName, nil
+			}
 			return "", fmt.Errorf("duplicate protocol name %s — peer names must be unique per ASN+address family", protoName)
 		}
 		protocolNames = append(protocolNames, protoName)
@@ -222,12 +247,10 @@ var funcMap = template.FuncMap{
 		if tags != nil {
 			t = *tags
 		}
-		protocolNameMapLock.Lock()
 		protocolNameMap[protoName] = &Protocol{
 			Name: *userSuppliedName,
 			Tags: t,
 		}
-		protocolNameMapLock.Unlock()
 		return protoName, nil
 	},
 

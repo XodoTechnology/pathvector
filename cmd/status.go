@@ -1,10 +1,7 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path"
 	"sort"
 	"strings"
 	"time"
@@ -66,7 +63,13 @@ var statusCmd = &cobra.Command{
 			log.Warnf("Error loading config, falling back to no-config output parsing: %s", err)
 		}
 
-		commandOutput, _, err := bird.RunCommand("show protocols all", c.BIRDSocket, time.Duration(c.BIRDTimeout)*time.Second)
+		birdSocket, birdDirectory := birdPaths(c)
+
+		var commandTimeout time.Duration
+		if c != nil {
+			commandTimeout = time.Duration(c.BIRDTimeout) * time.Second
+		}
+		commandOutput, _, err := bird.RunCommand("show protocols all", birdSocket, commandTimeout)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -74,12 +77,9 @@ var statusCmd = &cobra.Command{
 		// Read protocol names map
 		var protocols map[string]*templating.Protocol
 		if !realProtocolNames {
-			contents, err := os.ReadFile(path.Join("/etc/bird/", "protocols.json"))
+			protocols, err = readProtocolNames(birdDirectory)
 			if err != nil {
 				log.Fatalf("Reading protocol names: %v", err)
-			}
-			if err := json.Unmarshal(contents, &protocols); err != nil {
-				log.Fatalf("Unmarshalling protocol names: %v", err)
 			}
 		}
 
