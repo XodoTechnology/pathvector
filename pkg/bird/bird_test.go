@@ -18,7 +18,11 @@ func TestBirdConn(t *testing.T) {
 	t.Log("Removing existing socket")
 	_ = os.Remove(unixSocket)
 
+	// The client runs in a goroutine; wait for it before returning so it doesn't log after the test has completed
+	clientDone := make(chan struct{})
+	defer func() { <-clientDone }()
 	go func() {
+		defer close(clientDone)
 		time.Sleep(time.Millisecond * 10) // Wait for the server to start
 		resp, _, err := RunCommand("bird command test\n", unixSocket)
 		assert.Nil(t, err)
