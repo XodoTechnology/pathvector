@@ -305,3 +305,22 @@ func TestSplitPrefixesByAF(t *testing.T) {
 	_, _, err = splitPrefixesByAF(&[]string{"not-a-prefix"})
 	assert.NotNil(t, err)
 }
+
+func TestLoadAnnounceOriginatedOriginCommunities(t *testing.T) {
+	base := `
+asn: 34553
+router-id: 192.0.2.1
+peers:
+  iBGP:
+    asn: 34553
+    neighbors:
+      - 192.0.2.10
+`
+	c, err := Load([]byte(base))
+	assert.NoError(t, err)
+	assert.False(t, util.Deref(c.Peers["iBGP"].AnnounceOriginated), "no prefixes or origin communities, nothing to originate")
+
+	c, err = Load([]byte("origin-communities: [\"34553:1:1\"]\n" + base))
+	assert.NoError(t, err)
+	assert.True(t, util.Deref(c.Peers["iBGP"].AnnounceOriginated), "origin communities define locally originated routes")
+}

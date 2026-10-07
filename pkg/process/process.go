@@ -555,8 +555,8 @@ func Load(configBlob []byte) (*config.Config, error) {
 		}
 
 		// Check for no originated prefixes but announce-originated enabled
-		if len(c.Prefixes) < 1 && *peerData.AnnounceOriginated {
-			// No locally originated prefixes are defined, so there's nothing to originate
+		if len(c.Prefixes) < 1 && len(c.OriginCommunities) < 1 && *peerData.AnnounceOriginated {
+			// No locally originated prefixes or origin communities are defined, so there's nothing to originate
 			*peerData.AnnounceOriginated = false
 		}
 	} // end peer loop

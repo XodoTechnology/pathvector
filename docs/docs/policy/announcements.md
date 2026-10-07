@@ -33,3 +33,27 @@ peers:
 If `only-announce` is set but contains no prefixes of an address family, nothing is announced in that address family
 (for example, an `only-announce` list with only IPv4 prefixes means no IPv6 routes are announced to the peer).
 `only-announce` cannot be combined with `announce-all`.
+
+## Locally originated routes
+
+`announce-originated` (enabled by default) announces locally originated routes to the peer. A route is considered
+locally originated when it is
+
+- within one of the global `prefixes` (the matching `local-communities` are added to it), or
+- tagged with one of the global `origin-communities`, for example routes originated by another router in your network
+  and learned over iBGP.
+
+If neither `prefixes` nor `origin-communities` are configured, there is nothing to originate and `announce-originated`
+is disabled for all peers. A router without local `prefixes` can therefore still announce routes originated elsewhere in
+the network by tagging them with an origin community:
+
+```yaml
+asn: 65530
+origin-communities:
+  - 65530:0:1  # added to originated routes by the router that originates them
+peers:
+  Transit:
+    asn: 64496
+    neighbors:
+      - 203.0.113.1
+```
