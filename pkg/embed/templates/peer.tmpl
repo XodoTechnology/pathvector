@@ -265,8 +265,8 @@ protocol bgp {{ UniqueProtocolName $peer.ProtocolName $peerName $af $peer.ASN $p
             {{ end }}
 
             {{ if BoolDeref $peer.AnnounceDefault }}
-            # Send default route
-            if (proto = "default{{ $af }}") then accept;
+            # Send default route (locally generated or learned with accept-default)
+            if (proto = "default{{ $af }}" || net.len = 0) then accept;
             {{ end }}
 
             {{ StrDeref $peer.PreExportFinal }}

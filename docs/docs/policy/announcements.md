@@ -57,3 +57,10 @@ peers:
     neighbors:
       - 203.0.113.1
 ```
+
+## Default route
+
+`announce-default: true` announces a default route to the peer. The announced route is the best default route in
+BIRD's table: the locally originated `default4`/`default6` route (requires the global `default-route`, enabled by
+default), or a default route learned from another peer when the global `accept-default` is enabled. See
+[Kernel](kernel#default-routes) for how `accept-default` affects route selection.

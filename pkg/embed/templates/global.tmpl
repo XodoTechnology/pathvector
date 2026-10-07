@@ -48,13 +48,14 @@ protocol static statics6 {
 {{- end }}
 
 {{ if .DefaultRoute -}}
+# Default routes for announce-default
 protocol static default4 {
-  ipv4;
+  ipv4{{ if .AcceptDefault }} { preference 1; }; # accept-default: prefer default routes learned from peers{{ else }};{{ end }}
   route 0.0.0.0/0 reject;
 }
 
 protocol static default6 {
-  ipv6;
+  ipv6{{ if .AcceptDefault }} { preference 1; }; # accept-default: prefer default routes learned from peers{{ else }};{{ end }}
   route ::/0 reject;
 }
 {{- end }}

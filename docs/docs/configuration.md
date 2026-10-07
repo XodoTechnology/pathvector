@@ -263,7 +263,7 @@ Add a default route
 
 ### `accept-default`
 
-Should default routes be accepted? Setting to false adds 0.0.0.0/0 and ::/0 to the global bogon list.
+Should default routes be accepted from peers? When false, default routes are rejected by filter-prefix-length. When true, learned default routes are preferred over the locally generated default route and installed in the kernel.
 
 | Type | Default | Validation |
 |------|---------|------------|
