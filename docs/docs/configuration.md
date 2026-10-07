@@ -1087,6 +1087,14 @@ Map of ASN to import local pref for IPv6 routes (overrides as-prefs, not include
 |------|---------|------------|
 | map[uint32]uint32   |       |          |
 
+### `prefix-prefs`
+
+Map of prefix (BIRD prefix pattern, IPv4 and IPv6 may be mixed) to import local pref (not included in optimizer, takes precedence over as-prefs and community-prefs)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| map[string]uint32   |       |          |
+
 ### `community-prefs`
 
 Map of community to import local pref (not included in optimizer, as-prefs take precedence)

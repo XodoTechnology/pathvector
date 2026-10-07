@@ -329,6 +329,18 @@ module pathvector {
         description "Map value";
       }
     }
+    list prefix-prefs {
+      key "key";
+      description "Map of prefix (BIRD prefix pattern, IPv4 and IPv6 may be mixed) to import local pref (not included in optimizer, takes precedence over as-prefs and community-prefs)";
+      leaf key {
+        type string;
+        description "Map key";
+      }
+      leaf value {
+        type uint32;
+        description "Map value";
+      }
+    }
     list community-prefs {
       key "key";
       description "Map of community to import local pref (not included in optimizer, as-prefs take precedence)";

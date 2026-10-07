@@ -600,6 +600,23 @@ func Load(configBlob []byte) (*config.Config, error) {
 			return nil, fmt.Errorf("invalid only-announce prefix: %v", err)
 		}
 
+		// Split prefix-prefs by address family
+		if peerData.PrefixPrefs != nil {
+			peerData.PrefixPrefs4 = &map[string]uint32{}
+			peerData.PrefixPrefs6 = &map[string]uint32{}
+			for prefix, pref := range *peerData.PrefixPrefs {
+				v4, _, err := splitPrefixesByAF(&[]string{prefix})
+				if err != nil {
+					return nil, fmt.Errorf("invalid prefix-prefs prefix: %v", err)
+				}
+				if len(*v4) > 0 {
+					(*peerData.PrefixPrefs4)[prefix] = pref
+				} else {
+					(*peerData.PrefixPrefs6)[prefix] = pref
+				}
+			}
+		}
+
 		// Categorize communities
 		peerData.ImportStandardCommunities, peerData.ImportLargeCommunities, err = sortCommunitiesPtr(peerData.ImportCommunities)
 		if err != nil {

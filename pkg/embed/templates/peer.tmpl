@@ -144,7 +144,7 @@ protocol bgp {{ UniqueProtocolName $peer.ProtocolName $peerName $af $peer.ASN $p
             {{ if IntDeref $peer.LocalPref4 }}if (net.type = NET_IP4) then { bgp_local_pref = {{ $peer.LocalPref4 }}; }{{ end }}
             {{ if IntDeref $peer.LocalPref6 }}if (net.type = NET_IP6) then { bgp_local_pref = {{ $peer.LocalPref6 }}; }{{ end }}
 
-            {{/* Local pref precedence (last match wins): local-pref, local-pref4/6, community-prefs, as-prefs, as-prefs4/6 */}}
+            {{/* Local pref precedence (last match wins): local-pref, local-pref4/6, community-prefs, as-prefs, as-prefs4/6, prefix-prefs */}}
             {{ range $community, $pref := StringUint32MapDeref $peer.StandardCommunityPrefs }}
             if (({{ $community }}) ~ bgp_community) then { bgp_local_pref = {{ $pref }}; }
             {{ end }}
@@ -158,6 +158,10 @@ protocol bgp {{ UniqueProtocolName $peer.ProtocolName $peerName $af $peer.ASN $p
             {{ $afASPrefs := $peer.ASPrefs4 }}{{ if eq $af "6" }}{{ $afASPrefs = $peer.ASPrefs6 }}{{ end }}
             {{ range $asn, $pref := Uint32MapDeref $afASPrefs }}
             if ({{ $asn }} ~ bgp_path) then { bgp_local_pref = {{ $pref }}; } # as-prefs{{ $af }}
+            {{ end }}
+            {{ $afPrefixPrefs := $peer.PrefixPrefs4 }}{{ if eq $af "6" }}{{ $afPrefixPrefs = $peer.PrefixPrefs6 }}{{ end }}
+            {{ range $prefix, $pref := StringUint32MapDeref $afPrefixPrefs }}
+            if (net ~ [ {{ $prefix }} ]) then { bgp_local_pref = {{ $pref }}; } # prefix-prefs
             {{ end }}
 
             {{ if BoolDeref $peer.AllowBlackholeCommunity }}process_blackholes();{{ end }}

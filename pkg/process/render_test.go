@@ -186,3 +186,30 @@ peers:
 	assert.Less(t, localPref, communityPref)
 	assert.Less(t, communityPref, asPref)
 }
+
+func TestRenderPrefixPrefs(t *testing.T) {
+	out := renderConfig(t, `
+asn: 65530
+router-id: 192.0.2.1
+hostname: r1
+rpki-enable: false
+peers:
+  Peer:
+    asn: 64496
+    as-prefs:
+      6939: 150
+    prefix-prefs:
+      "198.51.100.0/24+": 200
+      "2001:db8:100::/40{40,48}": 210
+    neighbors: [192.0.2.1, 2001:db8::1]
+`)
+	conf := out["Peer"]
+	v4 := conf[:strings.Index(conf, "ipv6 {")]
+	v6 := conf[strings.Index(conf, "ipv6 {"):]
+	assert.Contains(t, v4, "if (net ~ [ 198.51.100.0/24+ ]) then { bgp_local_pref = 200; }")
+	assert.NotContains(t, v4, "2001:db8:100::/40")
+	assert.Contains(t, v6, "if (net ~ [ 2001:db8:100::/40{40,48} ]) then { bgp_local_pref = 210; }")
+	assert.NotContains(t, v6, "198.51.100.0/24")
+	// prefix-prefs take precedence over as-prefs (last match wins)
+	assert.Less(t, strings.Index(v4, "bgp_local_pref = 150"), strings.Index(v4, "bgp_local_pref = 200"))
+}

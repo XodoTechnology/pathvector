@@ -63,6 +63,31 @@ peers:
       6939: 120    # prefer IPv6 paths via AS6939
 ```
 
+## Local preference by prefix
+
+`prefix-prefs` maps a prefix to a local preference: routes matching the prefix get that local preference on import.
+Keys use BIRD prefix pattern syntax, so `198.51.100.0/24` matches exactly that prefix, `198.51.100.0/24+` also matches
+more specifics and `2001:db8::/32{32,48}` matches lengths 32 to 48. IPv4 and IPv6 prefixes can be mixed.
+
+Together with `as-prefs` (AS path contains an ASN), this allows simple traffic engineering for a single peer without
+custom BIRD configuration:
+
+```yaml
+peers:
+  Transit A:
+    asn: 64496
+    neighbors:
+      - 203.0.113.1
+    prefix-prefs:
+      "198.51.100.0/24+": 200        # prefer Transit A for this destination
+      "2001:db8:1000::/36{36,48}": 200
+    as-prefs:
+      64511: 80                      # avoid paths through AS64511 via Transit A
+```
+
+For more complex matching (for example AS path regular expressions), use `pre-import-accept` with custom BIRD filter
+statements.
+
 ## Precedence
 
 When several options match the same route, they are evaluated in this order, and the last match wins:
@@ -72,6 +97,7 @@ When several options match the same route, they are evaluated in this order, and
 3. `community-prefs`
 4. `as-prefs`
 5. `as-prefs4` / `as-prefs6`
+6. `prefix-prefs`
 
 For example, with `community-prefs: {"65530:0:200": 95}` and `as-prefs: {6939: 150}`, a route via AS6939 tagged with
 `65530:0:200` gets a local preference of 150.
