@@ -69,10 +69,21 @@ timeformat route iso long;
 
 log {{ if eq .LogFile "syslog" }}syslog{{ else }}"{{ .LogFile }}"{{ end }} all;
 
-protocol device {};
+{{ if not (SliceContains .DisableProtocols "device") }}
+protocol device {
+  {{ if .DeviceScanTime }}scan time {{ .DeviceScanTime }};{{ end }}
+}
+{{ end }}
 
-protocol direct { ipv4; ipv6; }
+{{ if not (SliceContains .DisableProtocols "direct") }}
+protocol direct {
+  ipv4;
+  ipv6;
+  {{ if .DirectCheckLink }}check link yes;{{ end }}
+}
+{{ end }}
 
+{{ if not (SliceContains .DisableProtocols "kernel4") }}
 protocol kernel kernel4 {
   scan time {{ .Kernel.ScanTime }};
   {{ if .Kernel.Learn }}learn;{{ end }}
@@ -115,7 +126,9 @@ protocol kernel kernel4 {
   };
   {{ if .MergePaths }}merge paths;{{ end }}
 }
+{{ end }}
 
+{{ if not (SliceContains .DisableProtocols "kernel6") }}
 protocol kernel kernel6 {
   scan time {{ .Kernel.ScanTime }};
   {{ if .Kernel.Learn }}learn;{{ end }}
@@ -159,6 +172,7 @@ protocol kernel kernel6 {
   };
   {{ if .MergePaths }}merge paths;{{ end }}
 }
+{{ end }}
 
 # --- Blackholing ---
 

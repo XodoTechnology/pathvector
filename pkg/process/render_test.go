@@ -339,3 +339,35 @@ func TestLoadInvalidCommunityName(t *testing.T) {
 	_, err = Load([]byte("asn: 65530\nrouter-id: 192.0.2.1\norigin-communities: [UNDEFINED]\n"))
 	assert.Error(t, err, "undefined community names are invalid communities")
 }
+
+func TestRenderGlobalProtocolOverrides(t *testing.T) {
+	out := renderConfig(t, `
+asn: 65530
+router-id: 192.0.2.1
+hostname: r1
+rpki-enable: false
+device-scan-time: 10
+direct-check-link: true
+disable-protocols: [kernel4, kernel6]
+global-config: |
+  protocol kernel kernel4 { ipv4 { import all; export where source != RTS_DEVICE; }; }
+  protocol kernel kernel6 { ipv6 { import all; export where source != RTS_DEVICE; }; }
+`)
+	global := out[""]
+	assert.Contains(t, global, "scan time 10;")
+	assert.Contains(t, global, "check link yes;")
+	assert.Equal(t, 1, strings.Count(global, "protocol kernel kernel4"), "only the user defined kernel4 protocol must be rendered")
+	assert.Equal(t, 1, strings.Count(global, "protocol kernel kernel6"))
+
+	out = renderConfig(t, `
+asn: 65530
+router-id: 192.0.2.1
+hostname: r1
+rpki-enable: false
+`)
+	assert.NotContains(t, out[""], "check link")
+	assert.Contains(t, out[""], "protocol kernel kernel4")
+
+	_, err := Load([]byte("asn: 65530\nrouter-id: 192.0.2.1\ndisable-protocols: [bgp]\n"))
+	assert.ErrorContains(t, err, "invalid disable-protocols entry bgp")
+}

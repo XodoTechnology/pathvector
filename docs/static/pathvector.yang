@@ -717,6 +717,21 @@ module pathvector {
     type string;
     description "Global BIRD configuration";
   }
+  leaf device-scan-time {
+    type int64;
+    default "0";
+    description "Time in seconds between interface scans of the BIRD device protocol (BIRD default if 0)";
+  }
+  leaf direct-check-link {
+    type boolean;
+    default "false";
+    description "Should the BIRD direct protocol only import routes of interfaces with link up? (check link)";
+  }
+  leaf-list disable-protocols {
+    type string;
+    ordered-by user;
+    description "Built-in BIRD protocols to leave out of the configuration so they can be defined in global-config or manual*.conf instead (device, direct, kernel4, kernel6)";
+  }
   leaf peeringdb-url {
     type string;
     default "https://peeringdb.com/api/";

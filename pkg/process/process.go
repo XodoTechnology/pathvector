@@ -335,6 +335,13 @@ func Load(configBlob []byte) (*config.Config, error) {
 		return nil, fmt.Errorf("validation: %s", err)
 	}
 
+	// Validate disabled built-in protocols
+	for _, protocol := range c.DisableProtocols {
+		if protocol != "device" && protocol != "direct" && protocol != "kernel4" && protocol != "kernel6" {
+			return nil, fmt.Errorf("invalid disable-protocols entry %s (must be one of device, direct, kernel4, kernel6)", protocol)
+		}
+	}
+
 	// Validate community names
 	for name, community := range c.Communities {
 		if categorizeCommunity(name) != "" {

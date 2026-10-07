@@ -353,7 +353,11 @@ type Config struct {
 	WebUIFile             string `yaml:"web-ui-file" description:"File to write web UI to (disabled if empty)" default:""`
 	LogFile               string `yaml:"log-file" description:"Log file location" default:"syslog"`
 	GlobalConfig          string `yaml:"global-config" description:"Global BIRD configuration" default:""`
-	PeeringDBURL          string `yaml:"peeringdb-url" description:"PeeringDB API URL, can be set to a local PeeringDB cache server" default:"https://peeringdb.com/api/"`
+
+	DeviceScanTime   int      `yaml:"device-scan-time" description:"Time in seconds between interface scans of the BIRD device protocol (BIRD default if 0)" default:"0"`
+	DirectCheckLink  bool     `yaml:"direct-check-link" description:"Should the BIRD direct protocol only import routes of interfaces with link up? (check link)" default:"false"`
+	DisableProtocols []string `yaml:"disable-protocols" description:"Built-in BIRD protocols to leave out of the configuration so they can be defined in global-config or manual*.conf instead (device, direct, kernel4, kernel6)" default:""`
+	PeeringDBURL     string   `yaml:"peeringdb-url" description:"PeeringDB API URL, can be set to a local PeeringDB cache server" default:"https://peeringdb.com/api/"`
 
 	Blocklist      []string `yaml:"blocklist" description:"List of ASNs, prefixes, and IP addresses to block" default:""`
 	BlocklistURLs  []string `yaml:"blocklist-urls" description:"List of URLs to fetch blocklists from" default:""`

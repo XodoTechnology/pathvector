@@ -70,3 +70,28 @@ peers:
     neighbors:
       - 203.0.113.1
 ```
+
+## Built-in protocols
+
+Besides the kernel protocols, Pathvector always configures a BIRD `device` protocol (interface discovery) and a
+`direct` protocol (routes for directly connected networks). They can be tuned with global options:
+
+- `device-scan-time`: seconds between interface scans (`scan time`), BIRD's default if unset.
+- `direct-check-link: true`: only import connected routes of interfaces whose link is up (`check link yes`).
+- `kernel.scan-time`, `kernel.learn`, `kernel.reject-connected` and the other `kernel` options described above.
+
+When these options aren't enough, list built-in protocols in `disable-protocols` (any of `device`, `direct`,
+`kernel4` and `kernel6`) to leave them out of the generated configuration, and define your own in `global-config` or
+a `manual*.conf` file in the BIRD directory:
+
+```yaml
+device-scan-time: 10
+direct-check-link: true
+disable-protocols: [ kernel4, kernel6 ]
+global-config: |
+  protocol kernel kernel4 { ipv4 { import all; export where source != RTS_DEVICE; }; }
+  protocol kernel kernel6 { ipv6 { import all; export where source != RTS_DEVICE; }; }
+```
+
+When you replace the kernel protocols, the `kernel` options (SRD communities, statics export, source addresses, ...)
+no longer apply to them.

@@ -101,6 +101,30 @@ Global BIRD configuration
 |------|---------|------------|
 | string   |       |          |
 
+### `device-scan-time`
+
+Time in seconds between interface scans of the BIRD device protocol (BIRD default if 0)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| int   | 0      |          |
+
+### `direct-check-link`
+
+Should the BIRD direct protocol only import routes of interfaces with link up? (check link)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| bool   | false      |          |
+
+### `disable-protocols`
+
+Built-in BIRD protocols to leave out of the configuration so they can be defined in global-config or manual*.conf instead (device, direct, kernel4, kernel6)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| []string   |       |          |
+
 ### `peeringdb-url`
 
 PeeringDB API URL, can be set to a local PeeringDB cache server
