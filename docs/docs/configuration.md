@@ -943,6 +943,14 @@ BGP gateway mode, 'direct' or 'recursive' (BIRD defaults to direct for directly 
 |------|---------|------------|
 | string   |       |          |
 
+### `cost`
+
+Distance (IGP metric) to the BGP next hop for sessions in direct gateway mode (mainly direct sessions), used in best path selection in place of the IGP metric
+
+| Type | Default | Validation |
+|------|---------|------------|
+| int   |       |          |
+
 ### `import-next-hop`
 
 Rewrite the BGP next hop before importing routes learned from this peer

@@ -26,3 +26,29 @@ peers:
       - fe80::1%eth0
     gateway: recursive
 ```
+
+## Next hop cost
+
+In recursive gateway mode (mainly multihop iBGP), BIRD uses the IGP metric of the path to the BGP next hop as a tie
+breaker in best path selection. Sessions in direct gateway mode have no IGP metric, so all of them look equally close.
+
+The `cost` peer option sets the distance to the next hop for routes from a session in direct gateway mode, for example
+to prefer one directly connected iBGP neighbor over another when no IGP provides metrics:
+
+```yaml
+peers:
+  Core A:
+    asn: 65530
+    direct: true
+    cost: 10
+    neighbors:
+      - 192.0.2.2
+  Core B:
+    asn: 65530
+    direct: true
+    cost: 20
+    neighbors:
+      - 192.0.2.3
+```
+
+`cost` is a per-channel option in BIRD, which is why it can't be set with `session-global`.

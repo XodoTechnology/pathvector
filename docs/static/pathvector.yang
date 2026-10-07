@@ -222,6 +222,10 @@ module pathvector {
       type string;
       description "BGP gateway mode, 'direct' or 'recursive' (BIRD defaults to direct for directly connected eBGP neighbors and recursive otherwise)";
     }
+    leaf cost {
+      type int64;
+      description "Distance (IGP metric) to the BGP next hop for sessions in direct gateway mode (mainly direct sessions), used in best path selection in place of the IGP metric";
+    }
     leaf import-next-hop {
       type string;
       description "Rewrite the BGP next hop before importing routes learned from this peer";

@@ -240,3 +240,20 @@ peers:
 `))
 	assert.ErrorContains(t, err, "invalid gateway mode")
 }
+
+func TestRenderCost(t *testing.T) {
+	out := renderConfig(t, `
+asn: 65530
+router-id: 192.0.2.1
+hostname: r1
+rpki-enable: false
+peers:
+  Core:
+    asn: 65530
+    direct: true
+    cost: 20
+    neighbors: [192.0.2.2]
+`)
+	assert.Contains(t, out["Core"], "cost 20;")
+	assert.NotContains(t, protocolLevel(out["Core"]), "cost", "cost is a channel option")
+}
