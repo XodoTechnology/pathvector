@@ -271,6 +271,7 @@ peers:
     asn: 65520
     template: upstream
     filter-irr: true
+    as-set: AS-EXAMPLE
     neighbors:
       - 192.0.2.3
 
@@ -437,4 +438,26 @@ func TestLoadRFC7951JSON(t *testing.T) {
 	assert.Equal(t, 65530, *globalConfig.Peers["Example"].ASN)
 	assert.Equal(t, 80, *globalConfig.Peers["Example"].LocalPref)
 	assert.Equal(t, []string{"203.0.113.25"}, *globalConfig.Peers["Example"].NeighborIPs)
+}
+
+func TestLoadASSetRequired(t *testing.T) {
+	for _, option := range []string{"filter-irr", "auto-as-set-members"} {
+		base := `
+asn: 34553
+router-id: 192.0.2.1
+peers:
+  Example:
+    asn: 65510
+    neighbors: [192.0.2.10]
+    ` + option + `: true
+`
+		_, err := Load([]byte(base))
+		assert.ErrorContains(t, err, option+" requires as-set or auto-as-set")
+
+		_, err = Load([]byte(base + "    as-set: AS-EXAMPLE\n"))
+		assert.NoError(t, err)
+
+		_, err = Load([]byte(base + "    auto-as-set: true\n"))
+		assert.NoError(t, err)
+	}
 }

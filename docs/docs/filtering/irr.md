@@ -32,6 +32,10 @@ peers:
 
 Enable `filter-irr` to enable IRR filtering.
 
+`filter-irr` and `auto-as-set-members` both need the peer's as-set: either set `as-set` directly or enable
+`auto-as-set` to get it from PeeringDB. Loading a config where one of them is enabled without either fails with an
+error such as `[Example] filter-irr requires as-set or auto-as-set`.
+
 Enable `filter-as-members` to reject routes that aren't originated from an ASN within the peer's `as-members` list.
 Enable `auto-as-set-members` to retrieve that list automatically from their PeeringDB IRR object.
 

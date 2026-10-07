@@ -437,6 +437,15 @@ func Load(configBlob []byte) (*config.Config, error) {
 			}
 		}
 
+		// filter-irr and auto-as-set-members need an as-set, either configured or from PeeringDB (auto-as-set)
+		hasASSet := (peerData.ASSet != nil && *peerData.ASSet != "") || *peerData.AutoASSet
+		if !hasASSet && *peerData.FilterIRR {
+			return nil, fmt.Errorf("[%s] filter-irr requires as-set or auto-as-set", peerName)
+		}
+		if !hasASSet && *peerData.AutoASSetMembers {
+			return nil, fmt.Errorf("[%s] auto-as-set-members requires as-set or auto-as-set", peerName)
+		}
+
 		// Validate gateway mode
 		if peerData.Gateway != nil && *peerData.Gateway != "direct" && *peerData.Gateway != "recursive" {
 			return nil, fmt.Errorf("[%s] invalid gateway mode: %s (must be direct or recursive)", peerName, *peerData.Gateway)
