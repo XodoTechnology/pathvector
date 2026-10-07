@@ -1185,7 +1185,7 @@ Rewrite nexthop to peer address
 
 ### `allow-blackhole-community`
 
-Should this peer be allowed to send routes with the blackhole community?
+Should this peer be allowed to send routes with the blackhole community? (Blackholed /32 and /128 routes are exempt from filter-prefix-length)
 
 | Type | Default | Validation |
 |------|---------|------------|

@@ -172,7 +172,7 @@ type Peer struct {
 	EnforceFirstAS          *bool `yaml:"enforce-first-as" description:"Should we only accept routes who's first AS is equal to the configured peer address?" default:"true"`
 	EnforcePeerNexthop      *bool `yaml:"enforce-peer-nexthop" description:"Should we only accept routes with a next hop equal to the configured neighbor address?" default:"true"`
 	ForcePeerNexthop        *bool `yaml:"force-peer-nexthop" description:"Rewrite nexthop to peer address" default:"false"`
-	AllowBlackholeCommunity *bool `yaml:"allow-blackhole-community" description:"Should this peer be allowed to send routes with the blackhole community?" default:"false"`
+	AllowBlackholeCommunity *bool `yaml:"allow-blackhole-community" description:"Should this peer be allowed to send routes with the blackhole community? (Blackholed /32 and /128 routes are exempt from filter-prefix-length)" default:"false"`
 	BlackholeIn             *bool `yaml:"blackhole-in" description:"Should imported routes be blackholed?" default:"false"`
 	BlackholeOut            *bool `yaml:"blackhole-out" description:"Should exported routes be blackholed?" default:"false"`
 

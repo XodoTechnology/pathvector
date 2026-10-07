@@ -170,8 +170,12 @@ function set_blackhole() {
   }
 }
 
+function is_blackhole() {
+  return ((ASN,1,666) ~ bgp_large_community) && ((net.type = NET_IP4 && net.len = 32) || (net.type = NET_IP6 && net.len = 128));
+}
+
 function process_blackholes() {
-  if (((ASN,1,666) ~ bgp_large_community) && ((net.type = NET_IP4 && net.len = 32) || (net.type = NET_IP6 && net.len = 128))) then {
+  if (is_blackhole()) then {
     set_blackhole();
   }
 }

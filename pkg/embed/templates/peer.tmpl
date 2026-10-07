@@ -91,7 +91,7 @@ protocol bgp {{ UniqueProtocolName $peer.ProtocolName $peerName $af $peer.ASN $p
 
             {{ if BoolDeref $peer.FilterBogonRoutes }}reject_bogon_routes();{{ end }}
             {{ if BoolDeref $peer.FilterBogonASNs }}reject_bogon_asns();{{ end }}
-            {{ if BoolDeref $peer.FilterPrefixLength }}reject_out_of_bounds_routes();{{ end }}
+            {{ if BoolDeref $peer.FilterPrefixLength }}{{ if BoolDeref $peer.AllowBlackholeCommunity }}if !is_blackhole() then {{ end }}reject_out_of_bounds_routes();{{ end }}
             {{ if BoolDeref $peer.FilterRPKI }}reject_rpki_invalid();{{ end }}
             {{ if BoolDeref $peer.StrictRPKI }}force_rpki_strict();{{ end }}
             {{ if BoolDeref $peer.FilterNeverViaRouteServers }}reject_never_via_route_servers();{{ end }}
