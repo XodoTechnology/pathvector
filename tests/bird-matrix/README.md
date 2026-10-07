@@ -60,6 +60,17 @@ test, built with `go build` if unset), `CONFIGS` (configs to use),
 `DAEMON_TEST=1` (daemon check, needs root), `KEEP_WORK=1` (keep the generated
 configs for debugging) and `XFAIL_FILE`.
 
+## Continuous integration
+
+`.github/workflows/bird-matrix.yml` runs the harness as a GitHub Actions
+matrix with one job per line of `versions.txt` (`make bird-matrix
+BIRD_VERSIONS=<version>` in each job). It runs on every branch push and pull
+request, can be started by hand (workflow_dispatch), and is called by
+`release.yml`: the goreleaser job `needs` the matrix, so a release tag is
+only published when every BIRD version passes.
+
+## Choosing the BIRD source
+
 BIRD is cloned from the GitHub mirror `https://github.com/CZ-NIC/bird.git` by
 default, because `gitlab.nic.cz` is not reachable from every CI runner. Set
 `BIRD_REPO` (script) or `--build-arg BIRD_REPO=...` (Docker) to use
@@ -95,7 +106,8 @@ Prefer fixing the template or raising `supportedMin` over adding entries.
 
 1. Find the tag: `git ls-remote --tags https://github.com/CZ-NIC/bird.git 'v2*'`.
 2. Try it: `make bird-matrix BIRD_VERSIONS=v2.x.y`.
-3. Add the tag to `versions.txt`.
+3. Add the tag to `versions.txt`. The CI workflow builds its matrix from
+   this file, so no workflow change is needed.
 4. If it fails because of a real incompatibility, fix the template or add an
    entry with the reason to `xfail.txt`.
 

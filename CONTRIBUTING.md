@@ -21,4 +21,4 @@ make bird-matrix                                  # all versions in tests/bird-m
 make bird-matrix BIRD_VERSIONS="v2.0.7 v2.15.1"   # selected versions
 ```
 
-See [tests/bird-matrix/README.md](tests/bird-matrix/README.md) for running it without Docker and for adding versions.
+It also runs in CI for every push and pull request and before every release. See [tests/bird-matrix/README.md](tests/bird-matrix/README.md) for running it without Docker and for adding versions.
