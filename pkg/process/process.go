@@ -115,6 +115,36 @@ func sortCommunitiesPtr(communities *[]string) (*[]string, *[]string, error) {
 	return &standard, &large, nil
 }
 
+// resolveCommunity returns the community for a community name defined in the global communities map, or the input unchanged
+func resolveCommunity(names map[string]string, community string) string {
+	if resolved, ok := names[community]; ok {
+		return resolved
+	}
+	return community
+}
+
+// resolveCommunities returns a copy of a community list with community names replaced by their communities
+func resolveCommunities(names map[string]string, communities []string) []string {
+	if communities == nil {
+		return nil
+	}
+	out := make([]string, len(communities))
+	for i, community := range communities {
+		out[i] = resolveCommunity(names, community)
+	}
+	return out
+}
+
+// resolveCommunitiesPtr is resolveCommunities for optional (pointer) lists. A new list is returned so lists shared with
+// a template aren't modified.
+func resolveCommunitiesPtr(names map[string]string, communities *[]string) *[]string {
+	if communities == nil {
+		return nil
+	}
+	out := resolveCommunities(names, *communities)
+	return &out
+}
+
 // splitPrefixesByAF splits a list of BIRD prefix set entries (optionally with a length range or +/- suffix) into IPv4 and IPv6 lists
 func splitPrefixesByAF(prefixes *[]string) (*[]string, *[]string, error) {
 	if prefixes == nil {
@@ -223,6 +253,16 @@ func Load(configBlob []byte) (*config.Config, error) {
 	validate := validator.New()
 	if err := validate.Struct(&c); err != nil {
 		return nil, fmt.Errorf("validation: %s", err)
+	}
+
+	// Validate community names
+	for name, community := range c.Communities {
+		if categorizeCommunity(name) != "" {
+			return nil, fmt.Errorf("invalid community name %s: community names must not be communities themselves", name)
+		}
+		if categorizeCommunity(community) == "" {
+			return nil, fmt.Errorf("invalid community %s for community name %s", community, name)
+		}
 	}
 
 	// Check for invalid templates
@@ -383,6 +423,26 @@ func Load(configBlob []byte) (*config.Config, error) {
 			log.Fatalf("[%s] only-announce and announce-all cannot both be true", peerName)
 		}
 
+		// Replace community names with their communities
+		peerData.ImportCommunities = resolveCommunitiesPtr(c.Communities, peerData.ImportCommunities)
+		peerData.ExportCommunities = resolveCommunitiesPtr(c.Communities, peerData.ExportCommunities)
+		peerData.AnnounceCommunities = resolveCommunitiesPtr(c.Communities, peerData.AnnounceCommunities)
+		peerData.RemoveCommunities = resolveCommunitiesPtr(c.Communities, peerData.RemoveCommunities)
+		if peerData.PrefixCommunities != nil {
+			resolved := map[string][]string{}
+			for prefix, communities := range *peerData.PrefixCommunities {
+				resolved[prefix] = resolveCommunities(c.Communities, communities)
+			}
+			peerData.PrefixCommunities = &resolved
+		}
+		if peerData.CommunityPrefs != nil {
+			resolved := map[string]uint32{}
+			for community, pref := range *peerData.CommunityPrefs {
+				resolved[resolveCommunity(c.Communities, community)] = pref
+			}
+			peerData.CommunityPrefs = &resolved
+		}
+
 		// Categorize prefix-communities
 		if peerData.PrefixCommunities != nil {
 			// Initialize community maps
@@ -497,6 +557,13 @@ func Load(configBlob []byte) (*config.Config, error) {
 
 	// Categorize communities
 	var err error
+	// Replace community names with their communities
+	c.Kernel.SRDCommunities = resolveCommunities(c.Communities, c.Kernel.SRDCommunities)
+	c.OriginCommunities = resolveCommunities(c.Communities, c.OriginCommunities)
+	c.ImportCommunities = resolveCommunities(c.Communities, c.ImportCommunities)
+	c.ExportCommunities = resolveCommunities(c.Communities, c.ExportCommunities)
+	c.LocalCommunities = resolveCommunities(c.Communities, c.LocalCommunities)
+
 	c.Kernel.SRDStandardCommunities, c.Kernel.SRDLargeCommunities, err = sortCommunities(c.Kernel.SRDCommunities)
 	if err != nil {
 		return nil, fmt.Errorf("invalid SRD community: %v", err)

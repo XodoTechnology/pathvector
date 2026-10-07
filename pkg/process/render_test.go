@@ -293,3 +293,49 @@ peers:
 `))
 	assert.ErrorContains(t, err, "invalid source4 address")
 }
+
+func TestRenderNamedCommunities(t *testing.T) {
+	out := renderConfig(t, `
+asn: 65530
+router-id: 192.0.2.1
+hostname: r1
+rpki-enable: false
+communities:
+  BLACKHOLE: 65510:100
+  CUSTOMER: 65530:0:10
+  UPSTREAM: 65530:0:20
+add-on-export: [UPSTREAM]
+templates:
+  customer:
+    add-on-import: [CUSTOMER]
+peers:
+  Customer:
+    asn: 64496
+    template: customer
+    announce: [CUSTOMER, "65530:0:30"]
+    community-prefs:
+      BLACKHOLE: 50
+    neighbors: [192.0.2.2]
+  Customer 2:
+    asn: 64497
+    template: customer
+    neighbors: [192.0.2.3]
+`)
+	conf := out["Customer"]
+	assert.Contains(t, conf, "bgp_large_community.add((65530,0,10));")
+	assert.Contains(t, conf, "if ((65530,0,10) ~ bgp_large_community) then accept;")
+	assert.Contains(t, conf, "if ((65530,0,30) ~ bgp_large_community) then accept;")
+	assert.Contains(t, conf, "if ((65510,100) ~ bgp_community) then { bgp_local_pref = 50; }")
+	assert.Contains(t, conf, "bgp_large_community.add((65530,0,20));")
+	assert.Contains(t, out["Customer 2"], "bgp_large_community.add((65530,0,10));")
+	assert.NotContains(t, conf, "(CUSTOMER)", "community names must be replaced")
+}
+
+func TestLoadInvalidCommunityName(t *testing.T) {
+	_, err := Load([]byte("asn: 65530\nrouter-id: 192.0.2.1\ncommunities:\n  65530:1: 65530:2\n"))
+	assert.ErrorContains(t, err, "community names must not be communities")
+	_, err = Load([]byte("asn: 65530\nrouter-id: 192.0.2.1\ncommunities:\n  FOO: bar\n"))
+	assert.ErrorContains(t, err, "invalid community bar")
+	_, err = Load([]byte("asn: 65530\nrouter-id: 192.0.2.1\norigin-communities: [UNDEFINED]\n"))
+	assert.Error(t, err, "undefined community names are invalid communities")
+}

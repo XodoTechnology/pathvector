@@ -133,6 +133,14 @@ List of files to fetch blocklists from
 |------|---------|------------|
 | []string   |       |          |
 
+### `communities`
+
+Map of community names to standard or large communities, names can be used in place of communities in any community option
+
+| Type | Default | Validation |
+|------|---------|------------|
+| map[string]string   |       |          |
+
 ### `origin-communities`
 
 List of communities to accept as locally originated routes

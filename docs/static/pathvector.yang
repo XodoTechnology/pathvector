@@ -733,6 +733,18 @@ module pathvector {
     ordered-by user;
     description "List of files to fetch blocklists from";
   }
+  list communities {
+    key "key";
+    description "Map of community names to standard or large communities, names can be used in place of communities in any community option";
+    leaf key {
+      type string;
+      description "Map key";
+    }
+    leaf value {
+      type string;
+      description "Map value";
+    }
+  }
   leaf-list origin-communities {
     type string;
     ordered-by user;

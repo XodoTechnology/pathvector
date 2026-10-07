@@ -361,10 +361,11 @@ type Config struct {
 	BlocklistASNs     []uint32 `yaml:"-" description:"-"`
 	BlocklistPrefixes []string `yaml:"-" description:"-"`
 
-	OriginCommunities []string `yaml:"origin-communities" description:"List of communities to accept as locally originated routes" default:""`
-	LocalCommunities  []string `yaml:"local-communities" description:"List of communities to add to locally originated prefixes" default:""`
-	ImportCommunities []string `yaml:"add-on-import" description:"List of communities to add to all imported routes" default:"-"`
-	ExportCommunities []string `yaml:"add-on-export" description:"List of communities to add to all exported routes" default:"-"`
+	Communities       map[string]string `yaml:"communities" description:"Map of community names to standard or large communities, names can be used in place of communities in any community option" default:"-"`
+	OriginCommunities []string          `yaml:"origin-communities" description:"List of communities to accept as locally originated routes" default:""`
+	LocalCommunities  []string          `yaml:"local-communities" description:"List of communities to add to locally originated prefixes" default:""`
+	ImportCommunities []string          `yaml:"add-on-import" description:"List of communities to add to all imported routes" default:"-"`
+	ExportCommunities []string          `yaml:"add-on-export" description:"List of communities to add to all exported routes" default:"-"`
 
 	Hostname string `yaml:"hostname" description:"Router hostname (default system hostname)" default:""`
 
