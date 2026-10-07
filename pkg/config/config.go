@@ -258,6 +258,8 @@ type VRRPInstance struct {
 	Priority  uint     `yaml:"priority" description:"RFC3768 VRRP Priority" validate:"required"`
 	VIPs      []string `yaml:"vips" description:"List of virtual IPs" validate:"required,cidr"`
 
+	VIPInterface string `yaml:"vip-interface" description:"Interface to bind virtual IPs to (defaults to the VRRP interface)"`
+
 	VIPs4 []string `yaml:"-" description:"-"`
 	VIPs6 []string `yaml:"-" description:"-"`
 }

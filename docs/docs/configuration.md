@@ -1545,4 +1545,12 @@ List of virtual IPs
 |------|---------|------------|
 | []string   |       | required,cidr         |
 
+### `vip-interface`
+
+Interface to bind virtual IPs to (defaults to the VRRP interface)
+
+| Type | Default | Validation |
+|------|---------|------------|
+| string   |       |          |
+
 
