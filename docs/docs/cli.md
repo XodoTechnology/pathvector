@@ -35,6 +35,10 @@ Flags:
 Use "pathvector [command] --help" for more information about a command.
 ```
 
+## Logging
+
+`--verbose` (`-v`) enables debug log messages. `--trace` (`-t`) enables trace log messages, which include everything shown by `--verbose` plus detailed internals such as every parsed config field.
+
 ## BIRD control socket
 
 Every command that talks to BIRD (`birdsh`/`cli`, `status`, `restart`, `version`, `config`, `generate` and `optimizer`) connects to the UNIX control socket set by the `bird-socket` config option (default `/run/bird/bird.ctl`). `birdsh` also accepts `--socket` to override it.
