@@ -401,3 +401,40 @@ peers:
 	assert.Equal(t, 90, util.Deref(c.Peers["iBGP template"].LocalPref))
 	assert.True(t, util.Deref(c.Peers["eBGP"].SetLocalPref))
 }
+
+func TestLoadJSON(t *testing.T) {
+	// YAML is a superset of JSON, so a JSON document with the YAML structure loads as-is
+	configFile := `{
+  "asn": 34553,
+  "router-id": "192.0.2.1",
+  "prefixes": ["192.0.2.0/24"],
+  "templates": {"upstream": {"local-pref": 80}},
+  "peers": {
+    "Example": {"asn": 65530, "template": "upstream", "neighbors": ["203.0.113.25"]}
+  }
+}`
+	globalConfig, err := Load([]byte(configFile))
+	assert.NoError(t, err)
+	assert.Equal(t, 34553, globalConfig.ASN)
+	assert.Equal(t, 65530, *globalConfig.Peers["Example"].ASN)
+	assert.Equal(t, 80, *globalConfig.Peers["Example"].LocalPref)
+}
+
+func TestLoadRFC7951JSON(t *testing.T) {
+	// RFC 7951 JSON instance of the pathvector YANG module
+	configFile := `{
+  "pathvector:asn": "34553",
+  "pathvector:router-id": "192.0.2.1",
+  "pathvector:prefixes": ["192.0.2.0/24"],
+  "pathvector:templates": [{"name": "upstream", "local-pref": "80"}],
+  "pathvector:peers": [
+    {"name": "Example", "asn": "65530", "template": "upstream", "neighbors": ["203.0.113.25"]}
+  ]
+}`
+	globalConfig, err := Load([]byte(configFile))
+	assert.NoError(t, err)
+	assert.Equal(t, 34553, globalConfig.ASN)
+	assert.Equal(t, 65530, *globalConfig.Peers["Example"].ASN)
+	assert.Equal(t, 80, *globalConfig.Peers["Example"].LocalPref)
+	assert.Equal(t, []string{"203.0.113.25"}, *globalConfig.Peers["Example"].NeighborIPs)
+}

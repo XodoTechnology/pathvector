@@ -28,6 +28,7 @@ import (
 	"github.com/natesales/pathvector/pkg/plugin"
 	"github.com/natesales/pathvector/pkg/templating"
 	"github.com/natesales/pathvector/pkg/util"
+	"github.com/natesales/pathvector/pkg/yang"
 )
 
 // categorizeCommunity checks if the community is in standard or large form, or an empty string if invalid
@@ -200,8 +201,17 @@ func addUnknownFieldHints(errMsg string) string {
 	return strings.Join(lines, "\n")
 }
 
-// Load loads a configuration file from a YAML file
+// Load loads a configuration file from a YAML file, or a JSON file (either in
+// the same structure as the YAML file or as RFC 7951 JSON of the YANG model)
 func Load(configBlob []byte) (*config.Config, error) {
+	if yang.IsRFC7951(configBlob) {
+		converted, err := yang.FromRFC7951(configBlob)
+		if err != nil {
+			return nil, fmt.Errorf("RFC 7951 JSON conversion: %s", err)
+		}
+		configBlob = converted
+	}
+
 	var c config.Config
 	c.Init()
 	defaults.MustSet(&c)

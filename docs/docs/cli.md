@@ -20,6 +20,7 @@ Available Commands:
   optimizer   Start optimization daemon
   status      Show protocol status
   version     Show version information
+  yang        Print YANG model of the configuration
 
 Flags:
   -c, --config string   YAML configuration file (default "/etc/pathvector.yml")
