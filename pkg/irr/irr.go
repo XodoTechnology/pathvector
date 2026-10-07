@@ -13,34 +13,75 @@ import (
 	"github.com/natesales/pathvector/pkg/config"
 )
 
-// withSourceFilter returns the AS set or AS set with the IRR source replaced with the -S SOURCE syntax
-// AS34553 -> AS34553
-// RIPE::AS34553 -> -S RIPE AS34553
-func withSourceFilter(asSet string) string {
-	if strings.Contains(asSet, "::") {
-		log.Debugf("Using IRRDB source from AS set %s", asSet)
-		tokens := strings.Split(asSet, "::")
-		return fmt.Sprintf("-S %s %s", tokens[0], tokens[1])
+// bgpq4Command is the bgpq4 executable to run. It is a variable so tests can substitute a fake implementation.
+var bgpq4Command = "bgpq4"
+
+// bgpq4ArgFlags is the set of bgpq4 single-letter flags that take an argument
+const bgpq4ArgFlags = "FfGHhLlMmRrSW"
+
+// hasSourcesFlag returns true if the user-supplied bgpq4 arguments already contain a -S (sources) flag
+func hasSourcesFlag(args []string) bool {
+	for _, arg := range args {
+		if len(arg) < 2 || arg[0] != '-' || arg[1] == '-' {
+			continue
+		}
+		// Walk combined short flags (e.g. -AS RIPE or -SRIPE), stopping at the first flag that takes an argument
+		for _, flag := range arg[1:] {
+			if flag == 'S' {
+				return true
+			}
+			if strings.ContainsRune(bgpq4ArgFlags, flag) {
+				break
+			}
+		}
 	}
-	return asSet
+	return false
+}
+
+// sourceFilter converts an AS set with an optional IRR source prefix into bgpq4 arguments.
+// If userArgs already specify IRR sources (-S), the as-set's source prefix is stripped and not added,
+// since a second -S flag would override the user's source list.
+//
+//	AS34553 -> [AS34553]
+//	RIPE::AS34553 -> [-S RIPE AS34553]
+//	RIPE::AS34553 (with -S in userArgs) -> [AS34553]
+func sourceFilter(asSet string, userArgs []string) []string {
+	if strings.Contains(asSet, "::") {
+		tokens := strings.SplitN(asSet, "::", 2)
+		if hasSourcesFlag(userArgs) {
+			log.Debugf("Ignoring IRRDB source %s from AS set %s because bgpq-args already contains -S", tokens[0], asSet)
+			return []string{tokens[1]}
+		}
+		log.Debugf("Using IRRDB source from AS set %s", asSet)
+		return []string{"-S", tokens[0], tokens[1]}
+	}
+	return []string{asSet}
+}
+
+// buildArgs builds a bgpq4 argument list from user arguments, query specific arguments and an as-set
+func buildArgs(bgpqArgs string, asSet string, queryArgs ...string) []string {
+	userArgs := strings.Fields(bgpqArgs)
+	args := append([]string{}, userArgs...)
+	args = append(args, queryArgs...)
+	return append(args, sourceFilter(asSet, userArgs)...)
+}
+
+// runBGPQ4 runs bgpq4 with the given arguments and returns stdout
+func runBGPQ4(args []string, queryTimeout uint) ([]byte, error) {
+	log.Debugf("Running %s %s", bgpq4Command, strings.Join(args, " "))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(queryTimeout))
+	defer cancel()
+	//nolint:golint,gosec
+	return exec.CommandContext(ctx, bgpq4Command, args...).Output()
 }
 
 // PrefixSet uses bgpq4 to generate a prefix filter and return only the filter lines
 func PrefixSet(macro string, family uint8, irrServer string, queryTimeout uint, bgpqArgs string) ([]string, error) {
 	var prefixes []string
 
-	for _, asSet := range strings.Split(macro, " ") {
+	for _, asSet := range strings.Fields(macro) {
 		// Run bgpq4 for BIRD format with aggregation enabled
-		cmdArgs := fmt.Sprintf("-h %s -Ab%d %s", irrServer, family, withSourceFilter(asSet))
-		if bgpqArgs != "" {
-			cmdArgs = bgpqArgs + " " + cmdArgs
-		}
-		log.Debugf("Running bgpq4 %s", cmdArgs)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(queryTimeout))
-		defer cancel()
-		//nolint:golint,gosec
-		cmd := exec.CommandContext(ctx, "bgpq4", strings.Split(cmdArgs, " ")...)
-		stdout, err := cmd.Output()
+		stdout, err := runBGPQ4(buildArgs(bgpqArgs, asSet, "-h", irrServer, fmt.Sprintf("-Ab%d", family)), queryTimeout)
 		if err != nil {
 			return nil, err
 		}
@@ -62,17 +103,7 @@ func PrefixSet(macro string, family uint8, irrServer string, queryTimeout uint, 
 
 // ASMembers uses bgpq4 to generate an AS member set
 func ASMembers(asSet string, irrServer string, queryTimeout uint, bgpqArgs string) ([]uint32, error) {
-	// Run bgpq4 for BIRD format with aggregation enabled
-	cmdArgs := fmt.Sprintf("-h %s -tj %s", irrServer, withSourceFilter(asSet))
-	if bgpqArgs != "" {
-		cmdArgs = bgpqArgs + " " + cmdArgs
-	}
-	log.Debugf("Running bgpq4 %s", cmdArgs)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(queryTimeout))
-	defer cancel()
-	//nolint:golint,gosec
-	cmd := exec.CommandContext(ctx, "bgpq4", strings.Split(cmdArgs, " ")...)
-	stdout, err := cmd.Output()
+	stdout, err := runBGPQ4(buildArgs(bgpqArgs, asSet, "-h", irrServer, "-tj"), queryTimeout)
 	if err != nil {
 		return nil, err
 	}
