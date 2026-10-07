@@ -218,6 +218,10 @@ module pathvector {
       default "false";
       description "Enable BGP additional paths on import?";
     }
+    leaf gateway {
+      type string;
+      description "BGP gateway mode, 'direct' or 'recursive' (BIRD defaults to direct for directly connected eBGP neighbors and recursive otherwise)";
+    }
     leaf import-next-hop {
       type string;
       description "Rewrite the BGP next hop before importing routes learned from this peer";

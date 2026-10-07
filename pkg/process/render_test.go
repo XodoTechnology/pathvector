@@ -213,3 +213,30 @@ peers:
 	// prefix-prefs take precedence over as-prefs (last match wins)
 	assert.Less(t, strings.Index(v4, "bgp_local_pref = 150"), strings.Index(v4, "bgp_local_pref = 200"))
 }
+
+func TestRenderGateway(t *testing.T) {
+	out := renderConfig(t, `
+asn: 65530
+router-id: 192.0.2.1
+hostname: r1
+rpki-enable: false
+peers:
+  Upstream:
+    asn: 64496
+    gateway: recursive
+    neighbors: ["fe80::1%eth0"]
+`)
+	assert.Contains(t, out["Upstream"], "gateway recursive;")
+	assert.NotContains(t, protocolLevel(out["Upstream"]), "gateway", "gateway is a channel option")
+
+	_, err := Load([]byte(`
+asn: 65530
+router-id: 192.0.2.1
+peers:
+  Upstream:
+    asn: 64496
+    gateway: indirect
+    neighbors: [192.0.2.1]
+`))
+	assert.ErrorContains(t, err, "invalid gateway mode")
+}

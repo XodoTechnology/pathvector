@@ -77,6 +77,7 @@ protocol bgp {{ UniqueProtocolName $peer.ProtocolName $peerName $af $peer.ASN $p
         export limit AS{{ $peer.ASN }}_{{ $peer.ProtocolName }}_EXPORT_v{{ $af }} action {{ $peer.ExportLimitTripAction }};
         {{ end }}
 
+        {{ if StrDeref $peer.Gateway }}gateway {{ StrDeref $peer.Gateway }};{{ end }}
         {{ if BoolDeref $peer.NextHopSelf }}next hop self;{{ end }}
         {{ if BoolDeref $peer.NextHopSelfEBGP }}next hop self ebgp;{{ end }}
         {{ if BoolDeref $peer.NextHopSelfIBGP }}next hop self ibgp;{{ end }}

@@ -437,6 +437,11 @@ func Load(configBlob []byte) (*config.Config, error) {
 			}
 		}
 
+		// Validate gateway mode
+		if peerData.Gateway != nil && *peerData.Gateway != "direct" && *peerData.Gateway != "recursive" {
+			return nil, fmt.Errorf("[%s] invalid gateway mode: %s (must be direct or recursive)", peerName, *peerData.Gateway)
+		}
+
 		// Validate RFC 9234 BGP role
 		if peerData.Role != nil {
 			peerData.Role = util.Ptr(strings.ReplaceAll(*peerData.Role, "-", "_"))
