@@ -676,8 +676,9 @@ func rejectImports(peerName string, peerData *config.Peer, reason string) {
 	peerData.Import = util.Ptr(false)
 }
 
-// peer processes a single peer
-func peer(peerName string, peerData *config.Peer, c *config.Config, wg *sync.WaitGroup) {
+// peer processes a single peer. If offline is true, no live IRR or PeeringDB queries are made and only data
+// cached by previous runs is used.
+func peer(peerName string, peerData *config.Peer, c *config.Config, offline bool, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	log.Debugf("Processing AS%d %s", *peerData.ASN, peerName)
@@ -689,13 +690,28 @@ func peer(peerName string, peerData *config.Peer, c *config.Config, wg *sync.Wai
 	if *peerData.AutoImportLimits || *peerData.AutoASSet {
 		log.Debugf("[%s] has auto-import-limits or auto-as-set, querying PeeringDB", peerName)
 
-		peeringdb.Update(peerData, c.PeeringDBQueryTimeout, c.PeeringDBAPIKey, c.PeeringDBCache)
+		// Falls back to the data cached on disk by the last successful query if PeeringDB is unreachable
+		//nolint:gosec // ASNs are 32-bit by definition
+		pDbData, err := peeringdb.NetworkInfoWithFallback(uint32(*peerData.ASN), c.PeeringDBQueryTimeout, c.PeeringDBAPIKey, c.PeeringDBCache, c.CacheDirectory, offline)
+		if err != nil {
+			log.Fatalf("[%s] unable to get PeeringDB data: %+v", peerName, err)
+		}
+		peeringdb.UpdateFromData(peerData, pDbData)
 	} // end peeringdb query enabled
+
+	// Results of successful IRR queries are cached per peer, and used if a later query fails (natesales/pathvector#188).
+	// The cached data takes precedence over rejecting all imports below.
+	irrCache := irr.LoadCache(irr.CachePath(c.CacheDirectory, *peerData.ASN, *util.Sanitize(peerName)))
+	defer func() {
+		if err := irrCache.Save(); err != nil {
+			log.Warnf("[%s] %v", peerName, err)
+		}
+	}()
 
 	// Build IRR prefix sets. IRR failures don't abort the whole run; instead the affected peer fails safe
 	// by rejecting all imports while every other peer is generated normally.
 	if *peerData.FilterIRR {
-		if err := irr.Update(peerData, c.IRRServer, c.IRRQueryTimeout, c.BGPQArgs); err != nil {
+		if err := irr.UpdateWithCache(peerData, c.IRRServer, c.IRRQueryTimeout, c.BGPQArgs, irrCache, offline); err != nil {
 			rejectImports(peerName, peerData, fmt.Sprintf("IRR prefix set generation failed: %v", err))
 		} else if emptyPtrSlice(peerData.PrefixSet4) && emptyPtrSlice(peerData.PrefixSet6) {
 			// With no prefixes at all the template skips the prefix set check entirely, so this would otherwise accept everything
@@ -708,7 +724,7 @@ func peer(peerName string, peerData *config.Peer, c *config.Config, wg *sync.Wai
 		if peerData.ASSet == nil || *peerData.ASSet == "" {
 			err = errors.New("peer has auto-as-set-members enabled and no as-set defined")
 		} else {
-			membersFromIRR, err = irr.ASMembers(*peerData.ASSet, c.IRRServer, c.IRRQueryTimeout, c.BGPQArgs)
+			membersFromIRR, err = irr.ASMembersWithCache(*peerData.ASSet, c.IRRServer, c.IRRQueryTimeout, c.BGPQArgs, irrCache, offline)
 		}
 		if err != nil {
 			rejectImports(peerName, peerData, fmt.Sprintf("unable to get AS set members: %v", err))
@@ -758,7 +774,8 @@ func peer(peerName string, peerData *config.Peer, c *config.Config, wg *sync.Wai
 }
 
 // Run runs the full data generation procedure
-func Run(configFilename, lockFile, version string, noConfigure, dryRun, withdraw bool) {
+// If offline is true, no live IRR or PeeringDB queries are made and only data cached by previous runs is used.
+func Run(configFilename, lockFile, version string, noConfigure, dryRun, withdraw, offline bool) {
 	// Check lockfile
 	if lockFile != "" {
 		if _, err := os.Stat(lockFile); err == nil {
@@ -793,7 +810,7 @@ func Run(configFilename, lockFile, version string, noConfigure, dryRun, withdraw
 	// Run NVRS query
 	if c.QueryNVRS {
 		var err error
-		c.NVRSASNs, err = peeringdb.NeverViaRouteServers(c.PeeringDBQueryTimeout, c.PeeringDBAPIKey)
+		c.NVRSASNs, err = peeringdb.NeverViaRouteServersWithFallback(c.PeeringDBQueryTimeout, c.PeeringDBAPIKey, c.CacheDirectory, offline)
 		if err != nil {
 			log.Fatalf("PeeringDB NVRS query: %s", err)
 		}
@@ -856,7 +873,7 @@ func Run(configFilename, lockFile, version string, noConfigure, dryRun, withdraw
 	wg := new(sync.WaitGroup)
 	for peerName, peerData := range c.Peers {
 		wg.Add(1)
-		go peer(peerName, peerData, c, wg)
+		go peer(peerName, peerData, c, offline, wg)
 	} // end peer loop
 	wg.Wait()
 

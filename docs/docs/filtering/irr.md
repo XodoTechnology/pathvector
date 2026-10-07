@@ -47,3 +47,5 @@ The peer also rejects all imports when:
 
 - `filter-irr` is enabled but IRR returns no IPv4 *and* no IPv6 prefixes for the peer. (If only one address family is empty, that family's prefix set is empty and rejects all routes of that family, while the other family is filtered normally.)
 - `auto-as-set-members` fails, or returns no members while `filter-as-set` is enabled. `filter-as-set` is then turned off for that peer, because BIRD can't use an empty AS set (imports are rejected anyway).
+
+If an earlier run cached IRR data for the peer, Pathvector uses that data with a warning instead of rejecting imports. See [Caching](../caching.md#irr).

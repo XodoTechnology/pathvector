@@ -87,7 +87,7 @@ func networkInfo(asn uint32, queryTimeout uint, apiKey string) (*Data, error) {
 	}
 
 	if res.StatusCode == 404 {
-		return nil, fmt.Errorf("peer %d doesn't have a PeeringDB page", asn)
+		return nil, fmt.Errorf("peer %d %w", asn, errNoPage)
 	}
 
 	if res.StatusCode != 200 {
@@ -110,7 +110,7 @@ func networkInfo(asn uint32, queryTimeout uint, apiKey string) (*Data, error) {
 	}
 
 	if len(pDbResponse.Data) < 1 {
-		return nil, fmt.Errorf("peer %d doesn't have a PeeringDB page", asn)
+		return nil, fmt.Errorf("peer %d %w", asn, errNoPage)
 	}
 
 	return &pDbResponse.Data[0], nil // nil error
@@ -144,6 +144,14 @@ func Update(peerData *config.Peer, queryTimeout uint, apiKey string, useCache bo
 	if err != nil {
 		log.Fatalf("unable to get PeeringDB data: %+v", err)
 	}
+	UpdateFromData(peerData, pDbData)
+}
+
+// UpdateFromData updates peer values from already retrieved PeeringDB data
+func UpdateFromData(peerData *config.Peer, pDbData *Data) {
+	// Work on a copy, as pDbData may be shared through the in-memory cache
+	d := *pDbData
+	pDbData = &d
 
 	// Set import limits
 	if *peerData.AutoImportLimits {

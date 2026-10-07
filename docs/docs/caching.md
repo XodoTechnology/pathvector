@@ -11,6 +11,18 @@ Networks should already be running their own RTR (RPKI to Router) server such as
 
 ## IRR
 
+Pathvector stores the results of every successful IRR query on disk, per peer, in the [`cache-directory`](https://pathvector.io/docs/configuration/#cache-directory):
+
+- `<cache-directory>/irr/AS<asn>_<peer name>.json` holds the IPv4 and IPv6 prefix sets (`filter-irr`) and the AS set members (`auto-as-set-members`) from the last successful query, along with the time of that query.
+
+If a later IRR query for that peer fails (for example because the IRR server is unreachable or times out), Pathvector logs a warning showing how old the cached data is and uses it instead:
+
+```
+level=warning msg="unable to get IPv4 IRR prefix list from AS-EXAMPLE: exit status 1: ...; using cached IRR prefix sets for AS-EXAMPLE from 2024-01-01T00:00:00Z (26h0m0s old)"
+```
+
+Cached data is only used for exactly the same query: if the peer's as-set, `bgpq-args` or `irr-accept-child-prefixes` changed since the data was cached, it is ignored. If there is no usable cached data, the peer fails safe and rejects all imports (see [IRR failure handling](filtering/irr.md#failure-handling)).
+
 ## PeeringDB
 
 Pathvector has an internal PeeringDB cache that stores PeeringDB objects *for the duration of a single `pathvector generate` run*. This does not cache for longer than a single command invocation.
@@ -35,6 +47,21 @@ peers:
 ```
 
 Separately from per-peer queries, Pathvector makes one global PeeringDB query per run for the list of networks that should never be reachable via route servers when a peer has [`filter-never-via-route-servers`](https://pathvector.io/docs/configuration/#filter-never-via-route-servers) set.
+
+In addition, the results of successful PeeringDB queries are stored on disk in the [`cache-directory`](https://pathvector.io/docs/configuration/#cache-directory), and used with a warning when PeeringDB can't be queried:
+
+- `<cache-directory>/peeringdb/AS<asn>.json` holds a network's PeeringDB data (used by `auto-import-limits` and `auto-as-set`).
+- `<cache-directory>/peeringdb/never-via-route-servers.json` holds the never via route servers list (used by `filter-never-via-route-servers`).
+
+If a network has no PeeringDB page, that is treated as a definitive answer and no cached data is used. If PeeringDB data is required and neither a live query nor cached data is available, generation stops with an error, as before.
+
+## Offline generation
+
+`pathvector generate --offline` skips all live IRR and PeeringDB queries and uses only the data cached on disk by previous runs. This is useful when the router can't reach the internet but its configuration still needs to be regenerated, for example after a local config change. Peers without cached IRR data reject all imports, and peers that need PeeringDB data without cached data cause an error.
+
+:::note
+The default `cache-directory` (`/var/run/pathvector/cache/`) is usually on a tmpfs and is cleared on reboot. To keep the cached IRR and PeeringDB data across reboots, set `cache-directory` to a persistent location such as `/var/cache/pathvector/`.
+:::
 
 ### PeeringDB Local Cache
 

@@ -52,9 +52,15 @@ peers:
 // runPeer runs peer() for a single peer and returns its rendered config
 func runPeer(t *testing.T, c *config.Config, name string) string {
 	t.Helper()
+	return runPeerOffline(t, c, name, false)
+}
+
+// runPeerOffline runs peer() for a single peer with the given offline mode and returns its rendered config
+func runPeerOffline(t *testing.T, c *config.Config, name string, offline bool) string {
+	t.Helper()
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
-	peer(name, c.Peers[name], c, wg)
+	peer(name, c.Peers[name], c, offline, wg)
 	wg.Wait()
 	files, err := filepath.Glob(filepath.Join(c.CacheDirectory, "AS*_"+*c.Peers[name].ProtocolName+".conf"))
 	require.NoError(t, err)
@@ -120,4 +126,60 @@ func TestPeerIRRSingleFamily(t *testing.T) {
 	out := runPeer(t, c, "Good")
 	assert.True(t, *c.Peers["Good"].Import)
 	assert.True(t, strings.Contains(out, "_PFX_v4 = -empty-;"))
+}
+
+func TestPeerIRRCacheFallback(t *testing.T) {
+	cacheDir := t.TempDir()
+	load := func(peers string) *config.Config {
+		c := loadTestPeers(t, peers)
+		c.CacheDirectory = cacheDir
+		return c
+	}
+
+	// A successful run populates the cache
+	shimBGPQ4(t, fakeBGPQ4Body("    198.51.100.0/24", "    2001:db8:1::/48", `{"NN": [65510, 65511]}`))
+	runPeer(t, load(irrTestPeers), "Good")
+	assert.FileExists(t, filepath.Join(cacheDir, "irr", "AS65510_GOOD.json"))
+
+	// IRR is now unreachable: the cached prefix sets and members are used instead of rejecting imports
+	shimBGPQ4(t, `echo "ERROR: network unreachable" >&2; exit 1`)
+	c := load(irrTestPeers)
+	out := runPeer(t, c, "Good")
+	assert.True(t, *c.Peers["Good"].Import)
+	assert.NotContains(t, out, "reject; # import: false")
+	assert.Contains(t, out, "198.51.100.0/24")
+	assert.Contains(t, out, "2001:db8:1::/48")
+	assert.Equal(t, []uint32{65510, 65511}, *c.Peers["Good"].ASSetMembers)
+
+	// Peers without cached data still fail safe
+	runPeer(t, c, "Bad")
+	assert.False(t, *c.Peers["Bad"].Import)
+
+	// Cached data for a different as-set is not used
+	c = load(strings.ReplaceAll(irrTestPeers, "as-set: AS-GOOD", "as-set: AS-OTHER"))
+	runPeer(t, c, "Good")
+	assert.False(t, *c.Peers["Good"].Import)
+}
+
+func TestPeerOffline(t *testing.T) {
+	cacheDir := t.TempDir()
+	shimBGPQ4(t, fakeBGPQ4Body("    198.51.100.0/24", "    2001:db8:1::/48", `{"NN": [65510]}`))
+	c := loadTestPeers(t, irrTestPeers)
+	c.CacheDirectory = cacheDir
+	runPeer(t, c, "Good")
+
+	// In offline mode bgpq4 must not be run at all
+	marker := filepath.Join(t.TempDir(), "ran")
+	shimBGPQ4(t, "touch "+marker+"\n"+fakeBGPQ4Body("    192.0.2.0/24", "    2001:db8:9::/48", `{"NN": [65599]}`))
+	c = loadTestPeers(t, irrTestPeers)
+	c.CacheDirectory = cacheDir
+	out := runPeerOffline(t, c, "Good", true)
+	assert.NoFileExists(t, marker)
+	assert.True(t, *c.Peers["Good"].Import)
+	assert.Contains(t, out, "198.51.100.0/24")
+
+	// Without cached data, offline peers fail safe
+	runPeerOffline(t, c, "Bad", true)
+	assert.False(t, *c.Peers["Bad"].Import)
+	assert.NoFileExists(t, marker)
 }
