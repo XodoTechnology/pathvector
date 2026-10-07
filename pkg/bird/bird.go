@@ -253,7 +253,12 @@ func Validate(binary string, cacheDir string) {
 					errorMessageToLog += scanner.Text() + "\n"
 				}
 				if line == errorLine {
-					errorMessageToLog += strings.Repeat(" ", errorChar-1) + "^ " + errorMessage + "\n"
+					// BIRD reports column 0 for errors that aren't tied to a position (e.g. "No protocol is specified")
+					indent := errorChar - 1
+					if indent < 0 {
+						indent = 0
+					}
+					errorMessageToLog += strings.Repeat(" ", indent) + "^ " + errorMessage + "\n"
 				}
 				line++
 			}
@@ -310,15 +315,20 @@ func MoveCacheAndReconfigure(birdDirectory string, cacheDirectory string, birdSo
 	}
 
 	if !noConfigure {
-		log.Info("Reconfiguring BIRD")
-		resp, _, err := RunCommand("configure", birdSocket)
-		if err != nil {
-			log.Fatal(err)
-		}
-		// Print bird output as multiple lines
-		for _, line := range strings.Split(strings.Trim(resp, "\n"), "\n") {
-			log.Printf("BIRD response (multiline): %s", line)
-		}
+		Reconfigure(birdSocket)
+	}
+}
+
+// Reconfigure tells BIRD to reload its configuration files
+func Reconfigure(birdSocket string) {
+	log.Info("Reconfiguring BIRD")
+	resp, _, err := RunCommand("configure", birdSocket)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Print bird output as multiple lines
+	for _, line := range strings.Split(strings.Trim(resp, "\n"), "\n") {
+		log.Printf("BIRD response (multiline): %s", line)
 	}
 }
 
