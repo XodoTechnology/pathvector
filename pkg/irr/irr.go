@@ -71,7 +71,7 @@ func buildArgs(bgpqArgs string, asSet string, queryArgs ...string) []string {
 // runBGPQ4 runs bgpq4 with the given arguments and returns stdout
 func runBGPQ4(args []string, queryTimeout uint) ([]byte, error) {
 	log.Debugf("Running %s %s", bgpq4Command, strings.Join(args, " "))
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(queryTimeout))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(queryTimeout)) //nolint:gosec // configured timeout in seconds, far below the int64 range
 	defer cancel()
 	//nolint:golint,gosec
 	out, err := exec.CommandContext(ctx, bgpq4Command, args...).Output()

@@ -146,7 +146,7 @@ func computeMetrics(o *config.Optimizer, global *config.Config, noConfigure bool
 				),
 			)
 		}
-		if p[peer].Latency >= time.Duration(o.LatencyThreshold)*time.Millisecond {
+		if p[peer].Latency >= time.Duration(o.LatencyThreshold)*time.Millisecond { //nolint:gosec // threshold in milliseconds, far below the int64 range
 			alerts = append(
 				alerts,
 				fmt.Sprintf("Peer AS%s %s met or exceeded maximum allowable latency: %v >= %v",
@@ -210,7 +210,11 @@ func modifyPref(
 
 	// Calculate new local pref
 	currentLocalPref := *peerData.LocalPref
-	newLocalPref := uint(currentLocalPref) - localPrefModifier
+	// Clamp at 0: subtracting a modifier larger than the local pref would otherwise wrap around
+	newLocalPref := 0
+	if currentLocalPref > 0 && uint(currentLocalPref) > localPrefModifier {
+		newLocalPref = currentLocalPref - int(localPrefModifier) //nolint:gosec // localPrefModifier < currentLocalPref
+	}
 
 	lpRegex := regexp.MustCompile(`bgp_local_pref = .*; # pathvector:localpref`)
 	modified := lpRegex.ReplaceAllString(string(peerFile), fmt.Sprintf("bgp_local_pref = %d; # pathvector:localpref", newLocalPref))

@@ -69,3 +69,18 @@ func TestModifyPrefNotOptimized(t *testing.T) {
 		t.Errorf("peer without optimize-inbound was modified:\n%s", after)
 	}
 }
+
+func TestModifyPrefClampsAtZero(t *testing.T) {
+	dir, peerFile := writeTestBIRDDir(t)
+	peers := map[string]*config.Peer{"Example": {LocalPref: util.Ptr(10), OptimizeInbound: util.Ptr(true)}}
+	birdBin, err := exec.LookPath("bird")
+	if err != nil {
+		t.Skip("bird binary not found")
+	}
+	// A modifier larger than the local pref must not wrap around to a huge unsigned value
+	modifyPref("65510"+Delimiter+"Example", peers, 20, dir, "", birdBin, true, false)
+	contents, _ := os.ReadFile(peerFile)
+	if !strings.Contains(string(contents), "bgp_local_pref = 0; # pathvector:localpref") {
+		t.Errorf("local pref not clamped to 0:\n%s", contents)
+	}
+}
