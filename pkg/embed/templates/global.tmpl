@@ -8,13 +8,18 @@ define LOCALv4 = [
 {{ BirdSet .Prefixes4 }}
 ];
 {{- end }}
-{{ if or .Prefixes4 .Kernel.Statics4 }}
+{{ if .Prefixes4 }}
 protocol static static4 {
   ipv4;
   {{- range $i, $prefix := .Prefixes4 }}
   route {{ $prefix }} reject;
   {{- end }}
-  {{- range $prefix, $nexthop := MapDeref .Kernel.Statics4 }}
+}
+{{- end }}
+{{ if .Kernel.Statics4 }}
+protocol static statics4 {
+  ipv4;
+  {{- range $prefix, $nexthop := .Kernel.Statics4 }}
   route {{ $prefix }} via {{ $nexthop }};
   {{- end }}
 }
@@ -25,12 +30,17 @@ define LOCALv6 = [
 {{ BirdSet .Prefixes6 }}
 ];
 {{- end }}
-{{ if or .Prefixes6 .Kernel.Statics6 }}
+{{ if .Prefixes6 }}
 protocol static static6 {
   ipv6;
   {{- range $i, $prefix := .Prefixes6 }}
   route {{ $prefix }} reject;
   {{- end }}
+}
+{{- end }}
+{{ if .Kernel.Statics6 }}
+protocol static statics6 {
+  ipv6;
   {{- range $prefix, $nexthop := .Kernel.Statics6 }}
   route {{ $prefix }} via {{ $nexthop }};
   {{- end }}
@@ -70,6 +80,7 @@ protocol kernel kernel4 {
     export filter {
       {{ if .Kernel.Export }}
       {{ if .Kernel.RejectConnected }}if source = RTS_DEVICE then reject;{{ end }}
+      {{ if .Kernel.Statics4 }}if (proto = "statics4") then accept;{{ end }}
       {{ $length := len .Kernel.SRDCommunities }}{{ if eq $length 0 }}
       {{- range $i, $rule := .Kernel.Accept4 }}
       if (proto = "{{ $rule }}") then accept;
@@ -112,6 +123,7 @@ protocol kernel kernel6 {
     export filter {
       {{ if .Kernel.Export }}
       {{ if .Kernel.RejectConnected }}if source = RTS_DEVICE then reject;{{ end }}
+      {{ if .Kernel.Statics6 }}if (proto = "statics6") then accept;{{ end }}
       {{ $length := len .Kernel.SRDCommunities }}{{ if eq $length 0 }}
       {{- range $i, $rule := .Kernel.Accept6 }}
       if (proto = "{{ $rule }}") then accept;

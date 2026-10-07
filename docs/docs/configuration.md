@@ -483,7 +483,7 @@ List of BIRD protocols to not import into the IPv6 table
 
 ### `statics`
 
-List of static routes to include in BIRD
+List of static routes to include in BIRD (always exported to the kernel, BIRD protocols statics4 and statics6)
 
 | Type | Default | Validation |
 |------|---------|------------|

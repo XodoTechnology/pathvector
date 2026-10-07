@@ -23,3 +23,29 @@ kernel:
   accept4: []             # BIRD protocols to always export to the kernel (IPv4)
   reject4: []             # BIRD protocols to never export to the kernel (IPv4)
 ```
+
+## Static routes
+
+`kernel.statics` maps a prefix to a next hop (optionally with an interface, `fe80::1%eth0`). Static routes are placed
+in their own BIRD protocols, `statics4` and `statics6`, separate from the locally originated `prefixes` (`static4` /
+`static6`), and are always exported to the kernel when `kernel.export` is enabled, including when `srd-communities` or
+`source4`/`source6` are configured.
+
+```yaml
+kernel:
+  statics:
+    "198.51.100.0/24": 203.0.113.1
+    "2001:db8:5::/48": "fe80::1%eth0"
+```
+
+## Selective route download (SRD)
+
+`kernel.srd-communities` limits which BGP routes are installed in the kernel: if the list is not empty, only routes
+carrying one of these communities (and `kernel.statics`) are exported to the kernel. This keeps the kernel FIB small
+when BIRD holds full tables.
+
+```yaml
+kernel:
+  srd-communities:
+    - 65530:100
+```
