@@ -324,3 +324,39 @@ peers:
 	assert.NoError(t, err)
 	assert.True(t, util.Deref(c.Peers["iBGP"].AnnounceOriginated), "origin communities define locally originated routes")
 }
+
+func TestLoadIBGPLocalPref(t *testing.T) {
+	c, err := Load([]byte(`
+asn: 34553
+router-id: 192.0.2.1
+templates:
+  core:
+    local-pref: 90
+peers:
+  iBGP:
+    asn: 34553
+    neighbors: [192.0.2.10]
+  iBGP explicit:
+    asn: 34553
+    local-pref: 120
+    neighbors: [192.0.2.11]
+  iBGP explicit set:
+    asn: 34553
+    set-local-pref: true
+    neighbors: [192.0.2.12]
+  iBGP template:
+    asn: 34553
+    template: core
+    neighbors: [192.0.2.13]
+  eBGP:
+    asn: 65510
+    neighbors: [192.0.2.14]
+`))
+	assert.NoError(t, err)
+	assert.False(t, util.Deref(c.Peers["iBGP"].SetLocalPref))
+	assert.True(t, util.Deref(c.Peers["iBGP explicit"].SetLocalPref))
+	assert.True(t, util.Deref(c.Peers["iBGP explicit set"].SetLocalPref))
+	assert.True(t, util.Deref(c.Peers["iBGP template"].SetLocalPref))
+	assert.Equal(t, 90, util.Deref(c.Peers["iBGP template"].LocalPref))
+	assert.True(t, util.Deref(c.Peers["eBGP"].SetLocalPref))
+}

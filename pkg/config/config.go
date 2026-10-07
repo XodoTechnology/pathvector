@@ -109,7 +109,7 @@ type Peer struct {
 	LocalPref              *int      `yaml:"local-pref" description:"BGP local preference" default:"100"`
 	LocalPref4             *int      `yaml:"local-pref4" description:"IPv4 BGP local preference (overrides local-pref, not included in optimizer)" default:"-"`
 	LocalPref6             *int      `yaml:"local-pref6" description:"IPv6 BGP local preference (overrides local-pref, not included in optimizer)" default:"-"`
-	SetLocalPref           *bool     `yaml:"set-local-pref" description:"Should an explicit local pref be set?" default:"true"`
+	SetLocalPref           *bool     `yaml:"set-local-pref" description:"Should an explicit local pref be set? (iBGP sessions without local-pref, local-pref4/6 or set-local-pref configured keep the local pref received from the neighbor)" default:"true"`
 	Multihop               *bool     `yaml:"multihop" description:"Should BGP multihop be enabled? (255 max hops)" default:"false"`
 	Listen4                *string   `yaml:"listen4" description:"IPv4 BGP listen address" default:"-"`
 	Listen6                *string   `yaml:"listen6" description:"IPv6 BGP listen address" default:"-"`

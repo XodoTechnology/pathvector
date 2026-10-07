@@ -247,6 +247,10 @@ func Load(configBlob []byte) (*config.Config, error) {
 			}
 		} // end peer template processor
 
+		// Record whether local pref options were configured (on the peer or its template) before defaults are applied
+		localPrefConfigured := peerData.LocalPref != nil || peerData.LocalPref4 != nil || peerData.LocalPref6 != nil
+		setLocalPrefConfigured := peerData.SetLocalPref != nil
+
 		// Set default values
 		peerValue := reflect.ValueOf(c.Peers[peerName]).Elem()
 		templateValueType := peerValue.Type()
@@ -293,6 +297,13 @@ func Load(configBlob []byte) (*config.Config, error) {
 			} else {
 				log.Tracef("[%s] skipping field %s with ignored default (-)", peerName, fieldName)
 			}
+		}
+
+		// Preserve local pref learned over iBGP unless a local pref is explicitly configured
+		isIBGP := *peerData.ASN == c.ASN || (peerData.LocalASN != nil && *peerData.LocalASN == *peerData.ASN)
+		if isIBGP && !localPrefConfigured && !setLocalPrefConfigured && !*peerData.OptimizeInbound {
+			log.Debugf("[%s] iBGP session without local-pref configured, not setting local pref on import", peerName)
+			peerData.SetLocalPref = util.Ptr(false)
 		}
 
 		if peerData.PreImportFilter != nil {

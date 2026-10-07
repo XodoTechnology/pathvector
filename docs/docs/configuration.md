@@ -769,7 +769,7 @@ IPv6 BGP local preference (overrides local-pref, not included in optimizer)
 
 ### `set-local-pref`
 
-Should an explicit local pref be set?
+Should an explicit local pref be set? (iBGP sessions without local-pref, local-pref4/6 or set-local-pref configured keep the local pref received from the neighbor)
 
 | Type | Default | Validation |
 |------|---------|------------|
