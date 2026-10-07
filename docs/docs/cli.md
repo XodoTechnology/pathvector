@@ -33,3 +33,7 @@ Flags:
 
 Use "pathvector [command] --help" for more information about a command.
 ```
+
+## version
+
+`pathvector version` prints the Pathvector build information and the version of the running BIRD daemon. The BIRD version is taken from the greeting BIRD sends when a client connects (e.g. `BIRD 2.14 ready.`). Some BIRD builds omit the version from the greeting (`BIRD ready.`), in which case Pathvector queries `show status` instead. If the version still can't be determined, it is reported as `unknown`. Pathvector logs a warning if the running BIRD is older than the minimum supported version (2.0.7).
