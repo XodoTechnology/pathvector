@@ -23,7 +23,7 @@ PeeringDB API key
 
 ### `peeringdb-cache`
 
-Cache PeeringDB results
+Global option to cache PeeringDB network records in memory for the duration of a single run, so peers with the same ASN only query PeeringDB once (this does not disable PeeringDB queries; to stop querying PeeringDB for a peer, disable auto-import-limits and auto-as-set on that peer)
 
 | Type | Default | Validation |
 |------|---------|------------|

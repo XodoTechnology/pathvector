@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -157,6 +158,48 @@ func templateReplacements(in string, peer *config.Peer) string {
 	return in
 }
 
+// unknownFieldRegex matches yaml.v3 strict decoding errors for unknown fields
+var unknownFieldRegex = regexp.MustCompile(`field (\S+) not found in type config\.(\w+)`)
+
+// yamlKeys returns the set of YAML keys defined on a struct type
+func yamlKeys(v interface{}) map[string]bool {
+	keys := map[string]bool{}
+	t := reflect.TypeOf(v)
+	for t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	for i := 0; i < t.NumField(); i++ {
+		key := strings.Split(t.Field(i).Tag.Get("yaml"), ",")[0]
+		if key != "" && key != "-" {
+			keys[key] = true
+		}
+	}
+	return keys
+}
+
+// addUnknownFieldHints appends a hint to unknown field errors when the field
+// exists at the other level of the config (global vs per-peer)
+func addUnknownFieldHints(errMsg string) string {
+	globalKeys := yamlKeys(config.Config{})
+	peerKeys := yamlKeys(config.Peer{})
+
+	lines := strings.Split(errMsg, "\n")
+	for i, line := range lines {
+		match := unknownFieldRegex.FindStringSubmatch(line)
+		if match == nil {
+			continue
+		}
+		field, typ := match[1], match[2]
+		switch {
+		case typ == "Peer" && globalKeys[field]:
+			lines[i] += fmt.Sprintf(" (%s is a global option, not a per-peer option)", field)
+		case typ == "Config" && peerKeys[field]:
+			lines[i] += fmt.Sprintf(" (%s is a per-peer option, set it under a peer or template)", field)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // Load loads a configuration file from a YAML file
 func Load(configBlob []byte) (*config.Config, error) {
 	var c config.Config
@@ -164,7 +207,7 @@ func Load(configBlob []byte) (*config.Config, error) {
 	defaults.MustSet(&c)
 
 	if err := util.YAMLUnmarshalStrict(configBlob, &c); err != nil {
-		return nil, fmt.Errorf("YAML unmarshal: %s", err)
+		return nil, fmt.Errorf("YAML unmarshal: %s", addUnknownFieldHints(err.Error()))
 	}
 
 	validate := validator.New()
@@ -597,10 +640,13 @@ func peer(peerName string, peerData *config.Peer, c *config.Config, wg *sync.Wai
 	log.Debugf("Processing AS%d %s", *peerData.ASN, peerName)
 
 	// If a PeeringDB query is required
+	// These are the only per-peer options that trigger a PeeringDB query; disabling
+	// both on a peer stops PeeringDB lookups for it. The global peeringdb-cache
+	// option only controls whether results are shared between peers in this run.
 	if *peerData.AutoImportLimits || *peerData.AutoASSet {
 		log.Debugf("[%s] has auto-import-limits or auto-as-set, querying PeeringDB", peerName)
 
-		peeringdb.Update(peerData, c.PeeringDBQueryTimeout, c.PeeringDBAPIKey, true)
+		peeringdb.Update(peerData, c.PeeringDBQueryTimeout, c.PeeringDBAPIKey, c.PeeringDBCache)
 	} // end peeringdb query enabled
 
 	// Build IRR prefix sets

@@ -137,6 +137,47 @@ func TestLoadConfigInvalidYAML(t *testing.T) {
 	}
 }
 
+func TestLoadConfigUnknownFieldHint(t *testing.T) {
+	configFile := `
+asn: 34553
+router-id: 192.0.2.1
+peers:
+  Example:
+    asn: 65510
+    neighbors:
+      - 203.0.113.12
+    peeringdb-cache: false
+`
+	_, err := Load([]byte(configFile))
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "field peeringdb-cache not found in type config.Peer")
+	assert.Contains(t, err.Error(), "(peeringdb-cache is a global option, not a per-peer option)")
+
+	configFile = `
+asn: 34553
+router-id: 192.0.2.1
+auto-import-limits: true
+`
+	_, err = Load([]byte(configFile))
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "(auto-import-limits is a per-peer option, set it under a peer or template)")
+
+	configFile = `
+asn: 34553
+router-id: 192.0.2.1
+peers:
+  Example:
+    asn: 65510
+    neighbors:
+      - 203.0.113.12
+    not-a-real-option: true
+`
+	_, err = Load([]byte(configFile))
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "field not-a-real-option not found in type config.Peer")
+	assert.NotContains(t, err.Error(), "option, ")
+}
+
 func TestLoadConfigValidationError(t *testing.T) {
 	configFile := "router-id: foo"
 	_, err := Load([]byte(configFile))
