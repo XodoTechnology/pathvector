@@ -1,8 +1,10 @@
 package irr
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -72,7 +74,15 @@ func runBGPQ4(args []string, queryTimeout uint) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*time.Duration(queryTimeout))
 	defer cancel()
 	//nolint:golint,gosec
-	return exec.CommandContext(ctx, bgpq4Command, args...).Output()
+	out, err := exec.CommandContext(ctx, bgpq4Command, args...).Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(bytes.TrimSpace(exitErr.Stderr)) > 0 {
+			return nil, fmt.Errorf("%w: %s", err, bytes.TrimSpace(exitErr.Stderr))
+		}
+		return nil, err
+	}
+	return out, nil
 }
 
 // PrefixSet uses bgpq4 to generate a prefix filter and return only the filter lines
@@ -86,18 +96,37 @@ func PrefixSet(macro string, family uint8, irrServer string, queryTimeout uint, 
 			return nil, err
 		}
 
-		for i, line := range strings.Split(string(stdout), "\n") {
-			if i == 0 { // Skip first line, as it is the definition line
-				continue
-			}
-			if strings.Contains(line, "];") { // Skip last line and return
-				break
-			}
-			// Trim whitespace and remove the comma, then append to the prefixes slice
-			prefixes = append(prefixes, strings.TrimSpace(strings.TrimRight(line, ",")))
+		pfx, err := parseBirdPrefixList(string(stdout))
+		if err != nil {
+			return nil, err
 		}
+		prefixes = append(prefixes, pfx...)
 	}
 
+	return prefixes, nil
+}
+
+// parseBirdPrefixList parses the prefixes from bgpq4 BIRD output, e.g.
+//
+//	NN = [
+//	    192.0.2.0/24,
+//	    198.51.100.0/24{24,25}
+//	];
+//
+// An empty list is output by bgpq4 as "NN = [ ];" and results in no prefixes.
+func parseBirdPrefixList(out string) ([]string, error) {
+	start := strings.Index(out, "[")
+	end := strings.LastIndex(out, "]")
+	if start == -1 || end == -1 || end < start {
+		return nil, fmt.Errorf("unexpected bgpq4 output: %q", out)
+	}
+	var prefixes []string
+	// One prefix per line; prefixes may contain commas themselves (e.g. 2001:db8::/47{47,48})
+	for _, line := range strings.Split(out[start+1:end], "\n") {
+		if p := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(line), ",")); p != "" {
+			prefixes = append(prefixes, p)
+		}
+	}
 	return prefixes, nil
 }
 

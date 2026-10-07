@@ -665,6 +665,17 @@ func Load(configBlob []byte) (*config.Config, error) {
 	return &c, nil // nil error
 }
 
+// emptyPtrSlice returns true if a slice pointer is nil or the slice has no elements
+func emptyPtrSlice[T any](s *[]T) bool {
+	return s == nil || len(*s) == 0
+}
+
+// rejectImports fails a peer safe by rejecting all routes imported from it
+func rejectImports(peerName string, peerData *config.Peer, reason string) {
+	log.Errorf("[%s] %s; rejecting all imports from AS%d", peerName, reason, *peerData.ASN)
+	peerData.Import = util.Ptr(false)
+}
+
 // peer processes a single peer
 func peer(peerName string, peerData *config.Peer, c *config.Config, wg *sync.WaitGroup) {
 	defer wg.Done()
@@ -681,18 +692,27 @@ func peer(peerName string, peerData *config.Peer, c *config.Config, wg *sync.Wai
 		peeringdb.Update(peerData, c.PeeringDBQueryTimeout, c.PeeringDBAPIKey, c.PeeringDBCache)
 	} // end peeringdb query enabled
 
-	// Build IRR prefix sets
+	// Build IRR prefix sets. IRR failures don't abort the whole run; instead the affected peer fails safe
+	// by rejecting all imports while every other peer is generated normally.
 	if *peerData.FilterIRR {
 		if err := irr.Update(peerData, c.IRRServer, c.IRRQueryTimeout, c.BGPQArgs); err != nil {
-			log.Fatal(err)
+			rejectImports(peerName, peerData, fmt.Sprintf("IRR prefix set generation failed: %v", err))
+		} else if emptyPtrSlice(peerData.PrefixSet4) && emptyPtrSlice(peerData.PrefixSet6) {
+			// With no prefixes at all the template skips the prefix set check entirely, so this would otherwise accept everything
+			rejectImports(peerName, peerData, fmt.Sprintf("filter-irr is enabled but no IPv4 or IPv6 prefixes were found for %s", *peerData.ASSet))
 		}
 	}
 	if *peerData.AutoASSetMembers {
-		membersFromIRR, err := irr.ASMembers(*peerData.ASSet, c.IRRServer, c.IRRQueryTimeout, c.BGPQArgs)
-		if err != nil {
-			log.Fatal(err)
+		var membersFromIRR []uint32
+		var err error
+		if peerData.ASSet == nil || *peerData.ASSet == "" {
+			err = errors.New("peer has auto-as-set-members enabled and no as-set defined")
+		} else {
+			membersFromIRR, err = irr.ASMembers(*peerData.ASSet, c.IRRServer, c.IRRQueryTimeout, c.BGPQArgs)
 		}
-		if peerData.ASSetMembers == nil {
+		if err != nil {
+			rejectImports(peerName, peerData, fmt.Sprintf("unable to get AS set members: %v", err))
+		} else if peerData.ASSetMembers == nil {
 			peerData.ASSetMembers = &membersFromIRR
 		} else {
 			newASSetMembers := *peerData.ASSetMembers
@@ -701,7 +721,12 @@ func peer(peerName string, peerData *config.Peer, c *config.Config, wg *sync.Wai
 		}
 	}
 	if *peerData.FilterASSet && (peerData.ASSetMembers == nil || len(*peerData.ASSetMembers) < 1) {
-		log.Fatalf("peer has filter-as-set enabled but no members in it's as-set")
+		if !*peerData.AutoASSetMembers {
+			log.Fatalf("peer has filter-as-set enabled but no members in it's as-set")
+		}
+		rejectImports(peerName, peerData, "filter-as-set is enabled but no as-set members were found")
+		// An empty AS set member list would render an invalid BIRD set; all imports are rejected anyway
+		peerData.FilterASSet = util.Ptr(false)
 	}
 
 	util.PrintStructInfo(peerName, peerData)

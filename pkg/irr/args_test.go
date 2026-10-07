@@ -115,3 +115,27 @@ func TestASMembersSourceArgs(t *testing.T) {
 		"-h rr.ntt.net -tj -S RIPE AS-SERVERFORGE",
 	}, invocations(t, logFile))
 }
+
+func TestParseBirdPrefixList(t *testing.T) {
+	testCases := []struct {
+		out         string
+		expected    []string
+		shouldError bool
+	}{
+		{"NN = [\n    192.31.196.0/24,\n    192.175.48.0/24\n];\n", []string{"192.31.196.0/24", "192.175.48.0/24"}, false},
+		{"NN = [\n    2001:500:9c::/47{47,48},\n    2001:500:9e::/47\n];\n", []string{"2001:500:9c::/47{47,48}", "2001:500:9e::/47"}, false},
+		{"NN = [ ];\n", nil, false}, // empty list
+		{"NN = [\n\n];\n", nil, false},
+		{"", nil, true},
+		{"garbage", nil, true},
+	}
+	for _, tc := range testCases {
+		out, err := parseBirdPrefixList(tc.out)
+		if tc.shouldError {
+			assert.Error(t, err)
+			continue
+		}
+		assert.NoError(t, err)
+		assert.Equal(t, tc.expected, out)
+	}
+}

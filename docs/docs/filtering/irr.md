@@ -34,3 +34,16 @@ Enable `filter-irr` to enable IRR filtering.
 
 Enable `filter-as-members` to reject routes that aren't originated from an ASN within the peer's `as-members` list.
 Enable `auto-as-set-members` to retrieve that list automatically from their PeeringDB IRR object.
+
+## Failure handling
+
+IRR lookups depend on an external service, so a single unreachable IRR server, a timeout, or a broken as-set must not prevent the rest of the router configuration from being generated. If a bgpq4 query fails for a peer, Pathvector logs an error and keeps going with the other peers. The affected peer **fails safe**: its `import` is set to `false`, so every route received from it is rejected until the next successful run. Sessions stay up and routes are still exported to the peer.
+
+```
+level=error msg="[Example] IRR prefix set generation failed: unable to get IPv4 IRR prefix list from AS-EXAMPLE: exit status 1: ...; rejecting all imports from AS65530"
+```
+
+The peer also rejects all imports when:
+
+- `filter-irr` is enabled but IRR returns no IPv4 *and* no IPv6 prefixes for the peer. (If only one address family is empty, that family's prefix set is empty and rejects all routes of that family, while the other family is filtered normally.)
+- `auto-as-set-members` fails, or returns no members while `filter-as-set` is enabled. `filter-as-set` is then turned off for that peer, because BIRD can't use an empty AS set (imports are rejected anyway).
